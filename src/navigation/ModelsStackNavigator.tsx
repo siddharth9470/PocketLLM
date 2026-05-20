@@ -10,7 +10,7 @@ export default function ModelsStackNavigator() {
   return (
     <Stack.Navigator
       screenOptions={{
-        headerLargeTitle: true,
+        headerLargeTitle: false,
         headerShadowVisible: false,
         headerStyle: { backgroundColor: colors.background },
         contentStyle: { backgroundColor: colors.background },

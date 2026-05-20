@@ -19,10 +19,6 @@ export default function ChatsStackNavigator() {
       <Stack.Screen
         name="ChatList"
         component={ChatListScreen}
-        options={{
-          title: 'Chats',
-          headerLargeTitle: true,
-        }}
       />
       <Stack.Screen
         name="Chat"
