@@ -1,5 +1,5 @@
 import * as FileSystem from "expo-file-system/legacy";
-import { HFModelDetails } from "../types/models";
+import { HFModelDetails, HuggingFaceModel } from "../types/models";
 
 export type DownloadProgressCallback = (progress: number) => void;
 
@@ -190,3 +190,54 @@ export const getDownloadUrlForModel = async (
         return null;
     }
 };
+
+// const fetchOnlyQ4Models = async () => {
+//   // Using 'gguf+q4' filters the initial repository list down significantly
+//   const url = 'https://huggingface.co/api/models?search=gguf+q4&limit=2000&sort=downloads&direction=-1&expand=pipeline_tag&expand=siblings';
+
+//   try {
+//     const response = await fetch(url);
+//     const rawModels = await response.json();
+
+//     const q4ModelsOnly = rawModels.map((model: HuggingFaceModel) => {
+//       const modelType = model.pipeline_tag || 'text-generation';
+//       const baseParamCount = model.gguf?.total || 1000000000;
+
+//       // Filter siblings locally in JavaScript (highly performant)
+//       const q4Files = (model.siblings || [])
+//         .filter(file => {
+//           const filename = file.rfilename.toLowerCase();
+//           // Matches standard Q4 variants: .q4_0.gguf, _q4_k_m.gguf, _q4_1.gguf, etc.
+//           return filename.endsWith('.gguf') && filename.includes('q4');
+//         })
+//         .map(file => {
+//           // Calculate dynamic size approximations since 'siblings' doesn't provide size here
+//           // Q4 quantizations average roughly 4.5 bits per parameter
+//           const estimatedFileBytes = (baseParamCount * 4.5) / 8;
+//           const sizeGB = estimatedFileBytes / (1024 * 1024 * 1024);
+
+//           // RAM rule of thumb for llama.rn: file size + ~1.5GB context/system overhead
+//           const estRamGB = sizeGB + 1.5;
+
+//           return {
+//             fileName: file.rfilename,
+//             estimatedDownloadSize: `${sizeGB.toFixed(2)} GB`,
+//             estimatedRamRequired: `${estRamGB.toFixed(2)} GB`
+//           };
+//         });
+
+//       return {
+//         repoId: model.id,
+//         type: modelType,
+//         downloads: model.downloads || 0,
+//         contextLength: model.gguf?.context_length || 2048,
+//         files: q4Files
+//       };
+//     }).filter(model => model.files.length > 0); // Drop any repos that didn't have a matching Q4 file
+
+//     return q4ModelsOnly;
+
+//   } catch (error) {
+//     console.error('Error fetching Q4 GGUF models:', error);
+//   }
+// };

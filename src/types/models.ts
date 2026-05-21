@@ -8,6 +8,8 @@ export interface HuggingFaceModel {
     library_name: string;
     createdAt: string;
     modelId: string;
+    pipeline_tag: string;
+    siblings: HFSibling[];
 }
 
 export type DownloadStatus = "idle" | "downloading" | "completed" | "failed";

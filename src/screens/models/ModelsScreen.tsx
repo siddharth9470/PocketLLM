@@ -17,7 +17,10 @@ export default function ModelsScreen(_props: ModelsStackScreenProps<"Models">) {
         initializeModel(
             "file:///Users/siddharth/Library/Developer/CoreSimulator/Devices/3E79BE2B-A22E-4A39-805C-23E752F33BD4/data/Containers/Data/Application/23BC571B-2C1C-420B-8076-078FCA74ED07/Documents/tinyllama-function-call-GGFU-010524.gguf",
         );
-        getRequest("api/models").then((res) => {
+
+        const modelApi =
+            "api/models?search=gguf+q4&limit=2000&sort=downloads&direction=-1&expand=pipeline_tag&expand=siblings&expand=tags&expand=likes&expand=private&expand=downloads&expand=createdAt&expand=lastModified&expand=author";
+        getRequest(modelApi).then((res) => {
             setHFModels(res.data as HuggingFaceModel[]);
         });
     }, []);
