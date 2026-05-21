@@ -74,43 +74,46 @@ export default function ModelCard({ model }: ModelCardProps) {
                 ))}
             </ScrollView>
 
-            {isDownloading && (
-                <View style={styles.progressTrack}>
-                    <View
-                        style={[
-                            styles.progressFill,
-                            { width: `${progress}%` }, // Updated to use the hook's progress
-                        ]}
-                    />
-                </View>
-            )}
-
-            <PrimaryButton
-                label={buttonLabel}
-                onPress={async () => {
-                    const modelDownloadUrl = await getDownloadUrlForModel(
-                        model.id,
-                    );
-                    if (!modelDownloadUrl) return;
-
-                    // 1. Pass the exact filename from Hugging Face instead of model.id
-                    // 2. Capture the returned URI
-                    const localUri = await startDownload(
-                        modelDownloadUrl.url,
-                        modelDownloadUrl.filename,
-                    );
-
-                    if (localUri) {
-                        console.log(
-                            "Model successfully downloaded and stored at:",
-                            localUri,
+            {isDownloading ? (
+                <>
+                    <View style={styles.progressTrack}>
+                        <View
+                            style={[
+                                styles.progressFill,
+                                { width: `${progress}%` }, // Updated to use the hook's progress
+                            ]}
+                        />
+                    </View>
+                    <Text style={styles.progressText}>{progress}%</Text>
+                </>
+            ) : (
+                <PrimaryButton
+                    label={buttonLabel}
+                    onPress={async () => {
+                        const modelDownloadUrl = await getDownloadUrlForModel(
+                            model.id,
                         );
-                    }
-                }}
-                loading={isDownloading}
-                disabled={isCompleted || isDownloading}
-                variant={isCompleted ? "success" : "primary"}
-            />
+                        if (!modelDownloadUrl) return;
+
+                        // 1. Pass the exact filename from Hugging Face instead of model.id
+                        // 2. Capture the returned URI
+                        const localUri = await startDownload(
+                            modelDownloadUrl.url,
+                            modelDownloadUrl.filename,
+                        );
+
+                        if (localUri) {
+                            console.log(
+                                "Model successfully downloaded and stored at:",
+                                localUri,
+                            );
+                        }
+                    }}
+                    loading={isDownloading}
+                    disabled={isCompleted || isDownloading}
+                    variant={isCompleted ? "success" : "primary"}
+                />
+            )}
         </View>
     );
 }
@@ -168,5 +171,11 @@ const styles = StyleSheet.create({
     progressFill: {
         height: "100%",
         backgroundColor: colors.primary,
+    },
+    progressText: {
+        ...typography.caption,
+        color: colors.textSecondary,
+        marginBottom: spacing.md,
+        alignSelf: "center",
     },
 });
