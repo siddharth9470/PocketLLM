@@ -7,17 +7,31 @@ import type { ModelsStackScreenProps } from "../../navigation/types";
 import type { HuggingFaceModel } from "../../types/models";
 import { useCallback, useEffect, useState } from "react";
 import { getRequest } from "../../api/apiClient";
+import { initializeModel, initiateChat } from "../../services/chatHelper";
+import { initLlama, loadLlamaModelInfo } from "llama.rn";
 
 export default function ModelsScreen(_props: ModelsStackScreenProps<"Models">) {
     const [huggingFaceModels, setHFModels] = useState<HuggingFaceModel[]>([]);
 
     useEffect(() => {
-        getRequest(
-            "api/models?search=ggfu&limit=2000&sort=downloads&direction=-1",
-        ).then((res) => {
-            console.log(res.data);
+        initializeModel(
+            "file:///Users/siddharth/Library/Developer/CoreSimulator/Devices/3E79BE2B-A22E-4A39-805C-23E752F33BD4/data/Containers/Data/Application/23BC571B-2C1C-420B-8076-078FCA74ED07/Documents/tinyllama-function-call-GGFU-010524.gguf",
+        );
+        getRequest("api/models").then((res) => {
             setHFModels(res.data as HuggingFaceModel[]);
         });
+
+        // const modelPath =
+        //     "file:///Users/siddharth/Library/Developer/CoreSimulator/Devices/3E79BE2B-A22E-4A39-805C-23E752F33BD4/data/Containers/Data/Application/23BC571B-2C1C-420B-8076-078FCA74ED07/Documents/tinyllama-function-call-GGFU-010524.gguf";
+        // console.log("Model Info:");
+
+        // loadLlamaModelInfo(modelPath).then((info) =>
+        //     console.log("Model Info:", info),
+        // );
+
+        setTimeout(() => {
+            initiateChat("Hi, how are you ?").then((res) => console.log(res));
+        }, 5000);
     }, []);
 
     const renderModelCard = useCallback(
@@ -58,3 +72,5 @@ const styles = StyleSheet.create({
         paddingBottom: spacing.xxl,
     },
 });
+
+//file:///Users/siddharth/Library/Developer/CoreSimulator/Devices/3E79BE2B-A22E-4A39-805C-23E752F33BD4/data/Containers/Data/Application/23BC571B-2C1C-420B-8076-078FCA74ED07/Documents/tinyllama-function-call-GGFU-010524.gguf

@@ -7,6 +7,8 @@ import { formatCount, parseModelId } from "../utils/parseModelId";
 import { useDownloadStore } from "../stores/downloadStore";
 import PrimaryButton from "./PrimaryButton";
 import TagChip from "./TagChip";
+import { getDownloadUrlForModel } from "../services/downloadHelpers";
+import { useModelDownloader } from "../services/useModelDownloader";
 
 interface ModelCardProps {
     model: HuggingFaceModel;
@@ -16,16 +18,19 @@ interface ModelCardProps {
 export default function ModelCard({ model }: ModelCardProps) {
     const { author, name } = parseModelId(model.id);
     const download = useDownloadStore((state) => state.getDownload(model.id));
-    const startDownload = useDownloadStore((state) => state.startDownload);
+    // const startDownload = useDownloadStore((state) => state.startDownload);
 
-    const isDownloading = download.status === "downloading";
-    const isCompleted = download.status === "completed";
-    const isFailed = download.status === "failed";
+    const { startDownload, cancelDownload, progress, isDownloading } =
+        useModelDownloader();
+
+    // const isDownloading = download.status === "downloading";
+    const isCompleted = download?.status === "completed";
+    const isFailed = download?.status === "failed";
 
     const buttonLabel = isCompleted
         ? "Downloaded"
         : isDownloading
-          ? `Downloading ${download.progress}%`
+          ? `Downloading ${progress}%` // Updated to use the hook's progress
           : isFailed
             ? "Retry Download"
             : "Download Model";
@@ -74,7 +79,7 @@ export default function ModelCard({ model }: ModelCardProps) {
                     <View
                         style={[
                             styles.progressFill,
-                            { width: `${download.progress}%` },
+                            { width: `${progress}%` }, // Updated to use the hook's progress
                         ]}
                     />
                 </View>
@@ -82,7 +87,26 @@ export default function ModelCard({ model }: ModelCardProps) {
 
             <PrimaryButton
                 label={buttonLabel}
-                onPress={() => startDownload(model.id)}
+                onPress={async () => {
+                    const modelDownloadUrl = await getDownloadUrlForModel(
+                        model.id,
+                    );
+                    if (!modelDownloadUrl) return;
+
+                    // 1. Pass the exact filename from Hugging Face instead of model.id
+                    // 2. Capture the returned URI
+                    const localUri = await startDownload(
+                        modelDownloadUrl.url,
+                        modelDownloadUrl.filename,
+                    );
+
+                    if (localUri) {
+                        console.log(
+                            "Model successfully downloaded and stored at:",
+                            localUri,
+                        );
+                    }
+                }}
                 loading={isDownloading}
                 disabled={isCompleted || isDownloading}
                 variant={isCompleted ? "success" : "primary"}

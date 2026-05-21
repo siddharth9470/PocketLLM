@@ -32,7 +32,9 @@ function mergeDownloadState(
 }
 
 function useModelDownloads() {
-    const [downloads, setDownloads] = useState<Record<string, ModelDownloadState>>({});
+    const [downloads, setDownloads] = useState<
+        Record<string, ModelDownloadState>
+    >({});
 
     const setDownloadState = useCallback(
         (modelId: string, updates: Partial<ModelDownloadState>) => {
@@ -103,7 +105,9 @@ function useModelDownloads() {
     };
 }
 
-const DownloadStoreContext = createContext<DownloadStore | undefined>(undefined);
+const DownloadStoreContext = createContext<DownloadStore | undefined>(
+    undefined,
+);
 
 export function DownloadStoreProvider({ children }: { children: ReactNode }) {
     const value = useModelDownloads();
