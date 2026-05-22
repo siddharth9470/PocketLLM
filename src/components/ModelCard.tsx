@@ -2,8 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { colors, radii, spacing, typography } from "../constants/theme";
-import { getDownloadUrlForModel } from "../services/downloadHelpers";
-import { useModelDownloader } from "../services/useModelDownloader";
 import type { HuggingFaceModel } from "../types/models";
 import { formatCount, parseModelId } from "../utils/parseModelId";
 import PrimaryButton from "./PrimaryButton";
@@ -11,13 +9,15 @@ import TagChip from "./TagChip";
 
 interface ModelCardProps {
     model: HuggingFaceModel;
+    downloadProgress: number;
+    activeDownload: boolean;
     onClickDownload: (item: HuggingFaceModel) => void;
 }
 
-export default function ModelCard({ model }: ModelCardProps) {
-    const { author, name } = parseModelId(model.id);
+export default function ModelCard(props: ModelCardProps) {
+    const { model, onClickDownload, downloadProgress, activeDownload } = props;
 
-    const { startDownload, cancelDownload, initDownload, progress, isDownloading } = useModelDownloader(model);
+    const { author, name } = parseModelId(model.id);
 
     return (
         <View style={styles.card}>
@@ -46,31 +46,23 @@ export default function ModelCard({ model }: ModelCardProps) {
                 ))}
             </ScrollView>
 
-            {isDownloading ? (
+            {activeDownload ? (
                 <>
                     <View style={styles.progressTrack}>
                         <View
                             style={[
                                 styles.progressFill,
-                                { width: `${progress}%` }, // Updated to use the hook's progress
+                                { width: `${downloadProgress}%` }, // Updated to use the hook's progress
                             ]}
                         />
                     </View>
-                    <Text style={styles.progressText}>{progress}%</Text>
+                    <Text style={styles.progressText}>{downloadProgress}%</Text>
                 </>
             ) : (
                 <PrimaryButton
                     label={"Download"}
-                    onPress={async () => {
-                        // 1. Pass the exact filename from Hugging Face instead of model.id
-                        // 2. Capture the returned URI
-                        const localUri = await initDownload(model);
-
-                        if (localUri) {
-                            console.log("Model successfully downloaded and stored at:", localUri);
-                        }
-                    }}
-                    loading={isDownloading}
+                    onPress={async () => onClickDownload(model)}
+                    loading={activeDownload}
                     // disabled={isCompleted || isDownloading}
                     // variant={isCompleted ? "success" : "primary"}
                 />
