@@ -8,7 +8,6 @@ import {
     type ReactNode,
 } from "react";
 
-import { downloadModelFile } from "../services/downloadModel";
 import type { ModelDownloadState } from "../types/models";
 
 interface DownloadStore {
@@ -63,22 +62,22 @@ function useModelDownloads() {
 
             setDownloadState(modelId, { status: "downloading", progress: 0 });
 
-            try {
-                const result = await downloadModelFile(modelId, (progress) => {
-                    setDownloadState(modelId, {
-                        status: "downloading",
-                        progress,
-                    });
-                });
+            // try {
+            //     const result = await downloadModelFile(modelId, (progress) => {
+            //         setDownloadState(modelId, {
+            //             status: "downloading",
+            //             progress,
+            //         });
+            //     });
 
-                setDownloadState(modelId, {
-                    status: "completed",
-                    progress: 100,
-                    localPath: result.localPath,
-                });
-            } catch {
-                setDownloadState(modelId, { status: "failed", progress: 0 });
-            }
+            //     setDownloadState(modelId, {
+            //         status: "completed",
+            //         progress: 100,
+            //         localPath: result.localPath,
+            //     });
+            // } catch {
+            //     setDownloadState(modelId, { status: "failed", progress: 0 });
+            // }
         },
         [downloads, setDownloadState],
     );
