@@ -1,5 +1,7 @@
 import { useState, useRef } from "react";
 import * as FileSystem from "expo-file-system/legacy";
+import { getDownloadUrlForModel } from "./downloadHelpers";
+import { HuggingFaceModel } from "../types/models";
 
 export const useModelDownloader = () => {
     const [progress, setProgress] = useState(0);
@@ -11,14 +13,20 @@ export const useModelDownloader = () => {
     > | null>(null);
 
     const startDownload = async (
-        downloadUrl: string,
-        filename: string,
+        model: HuggingFaceModel,
     ): Promise<string | null> => {
         setIsDownloading(true);
         setProgress(0);
 
+        const modelDownloadUrl = await getDownloadUrlForModel(model.id);
+        if (!modelDownloadUrl) {
+            console.error("Download failed");
+            return null;
+        }
+
         // 1. Define the permanent, safe path on the device
-        const fileUri = FileSystem.documentDirectory + filename;
+        const fileUri =
+            FileSystem.documentDirectory + modelDownloadUrl.filename;
 
         try {
             // 2. Check if the file is already there so we don't waste data
@@ -33,7 +41,7 @@ export const useModelDownloader = () => {
 
             // 3. Create the resumable download task
             const downloadResumable = FileSystem.createDownloadResumable(
-                downloadUrl,
+                modelDownloadUrl.url,
                 fileUri,
                 {},
                 (downloadProgress) => {

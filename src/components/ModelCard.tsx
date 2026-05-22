@@ -75,17 +75,9 @@ export default function ModelCard({ model }: ModelCardProps) {
                 <PrimaryButton
                     label={"Download"}
                     onPress={async () => {
-                        const modelDownloadUrl = await getDownloadUrlForModel(
-                            model.id,
-                        );
-                        if (!modelDownloadUrl) return;
-
                         // 1. Pass the exact filename from Hugging Face instead of model.id
                         // 2. Capture the returned URI
-                        const localUri = await startDownload(
-                            modelDownloadUrl.url,
-                            modelDownloadUrl.filename,
-                        );
+                        const localUri = await startDownload(model);
 
                         if (localUri) {
                             console.log(
