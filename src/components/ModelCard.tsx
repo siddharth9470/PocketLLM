@@ -4,7 +4,6 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { colors, radii, spacing, typography } from "../constants/theme";
 import type { HuggingFaceModel } from "../types/models";
 import { formatCount, parseModelId } from "../utils/parseModelId";
-import { useDownloadStore } from "../stores/downloadStore";
 import PrimaryButton from "./PrimaryButton";
 import TagChip from "./TagChip";
 import { getDownloadUrlForModel } from "../services/downloadHelpers";
@@ -17,23 +16,9 @@ interface ModelCardProps {
 
 export default function ModelCard({ model }: ModelCardProps) {
     const { author, name } = parseModelId(model.id);
-    const download = useDownloadStore((state) => state.getDownload(model.id));
-    // const startDownload = useDownloadStore((state) => state.startDownload);
 
     const { startDownload, cancelDownload, progress, isDownloading } =
         useModelDownloader();
-
-    // const isDownloading = download.status === "downloading";
-    const isCompleted = download?.status === "completed";
-    const isFailed = download?.status === "failed";
-
-    const buttonLabel = isCompleted
-        ? "Downloaded"
-        : isDownloading
-          ? `Downloading ${progress}%` // Updated to use the hook's progress
-          : isFailed
-            ? "Retry Download"
-            : "Download Model";
 
     return (
         <View style={styles.card}>
@@ -88,7 +73,7 @@ export default function ModelCard({ model }: ModelCardProps) {
                 </>
             ) : (
                 <PrimaryButton
-                    label={buttonLabel}
+                    label={"Download"}
                     onPress={async () => {
                         const modelDownloadUrl = await getDownloadUrlForModel(
                             model.id,
@@ -110,8 +95,8 @@ export default function ModelCard({ model }: ModelCardProps) {
                         }
                     }}
                     loading={isDownloading}
-                    disabled={isCompleted || isDownloading}
-                    variant={isCompleted ? "success" : "primary"}
+                    // disabled={isCompleted || isDownloading}
+                    // variant={isCompleted ? "success" : "primary"}
                 />
             )}
         </View>

@@ -1,7 +1,7 @@
 import { NavigationContainer } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 
-import RootNavigator from "./src/navigation/RootNavigator";
+import CentralNavigator from "./src/navigation/CentralNavigator";
 import { ChatStoreProvider } from "./src/stores/chatStore";
 import { DownloadStoreProvider } from "./src/stores/downloadStore";
 
@@ -10,7 +10,7 @@ export default function App() {
         <ChatStoreProvider>
             <DownloadStoreProvider>
                 <NavigationContainer>
-                    <RootNavigator />
+                    <CentralNavigator />
                     <StatusBar style="auto" />
                 </NavigationContainer>
             </DownloadStoreProvider>
