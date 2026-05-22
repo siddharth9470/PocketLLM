@@ -48,9 +48,7 @@ export const initializeModel = async (modelPath: string): Promise<void> => {
 export const initiateChat = async (question: string): Promise<string> => {
     // Prevent querying if the model hasn't finished loading
     if (!llamaContext) {
-        throw new Error(
-            "Llama context is not initialized. Please call initializeModel() first.",
-        );
+        throw new Error("Llama context is not initialized. Please call initializeModel() first.");
     }
 
     try {
@@ -59,8 +57,7 @@ export const initiateChat = async (question: string): Promise<string> => {
                 messages: [
                     {
                         role: "system",
-                        content:
-                            "This is a conversation between user and assistant, a friendly chatbot.",
+                        content: "This is a conversation between user and assistant, a friendly chatbot.",
                     },
                     {
                         role: "user",
@@ -74,7 +71,7 @@ export const initiateChat = async (question: string): Promise<string> => {
                 // Future enhancement: You can use this callback to stream tokens
                 // to your React Native UI state one by one as they generate!
                 // const { token } = data;
-            },
+            }
         );
 
         console.log("Generation Timings:", msgResult.timings);

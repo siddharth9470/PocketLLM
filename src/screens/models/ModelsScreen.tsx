@@ -1,21 +1,20 @@
+import { initLlama, loadLlamaModelInfo } from "llama.rn";
+import { useCallback, useEffect, useState } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
-
+import { getRequest } from "../../api/apiClient";
 import ModelCard from "../../components/ModelCard";
 import { colors, spacing } from "../../constants/theme";
 import { MOCK_MODELS } from "../../data/mockModels";
 import type { ModelsStackScreenProps } from "../../navigation/types";
-import type { HuggingFaceModel } from "../../types/models";
-import { useCallback, useEffect, useState } from "react";
-import { getRequest } from "../../api/apiClient";
 import { initializeModel, initiateChat } from "../../services/chatHelper";
-import { initLlama, loadLlamaModelInfo } from "llama.rn";
+import type { HuggingFaceModel } from "../../types/models";
 
 export default function ModelsScreen(_props: ModelsStackScreenProps<"Models">) {
     const [huggingFaceModels, setHFModels] = useState<HuggingFaceModel[]>([]);
 
     useEffect(() => {
         initializeModel(
-            "file:///data/user/0/com.app.pocketllm/files/hyperclovax-seed-text-instruct-1.5b-q4_k_m.gguf",
+            "file:///data/user/0/com.app.pocketllm/files/hyperclovax-seed-text-instruct-1.5b-q4_k_m.gguf"
         ).then(() => {
             initiateChat("Hi, how are you?").then((res) => console.log(res));
         });
@@ -27,19 +26,16 @@ export default function ModelsScreen(_props: ModelsStackScreenProps<"Models">) {
         });
     }, []);
 
-    const renderModelCard = useCallback(
-        ({ item }: { item: HuggingFaceModel }) => {
-            return (
-                <ModelCard
-                    model={item}
-                    onClickDownload={(item: HuggingFaceModel) => {
-                        console.log();
-                    }}
-                />
-            );
-        },
-        [],
-    );
+    const renderModelCard = useCallback(({ item }: { item: HuggingFaceModel }) => {
+        return (
+            <ModelCard
+                model={item}
+                onClickDownload={(item: HuggingFaceModel) => {
+                    console.log();
+                }}
+            />
+        );
+    }, []);
 
     return (
         <View style={styles.container}>

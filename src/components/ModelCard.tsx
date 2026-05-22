@@ -2,12 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { colors, radii, spacing, typography } from "../constants/theme";
+import { getDownloadUrlForModel } from "../services/downloadHelpers";
+import { useModelDownloader } from "../services/useModelDownloader";
 import type { HuggingFaceModel } from "../types/models";
 import { formatCount, parseModelId } from "../utils/parseModelId";
 import PrimaryButton from "./PrimaryButton";
 import TagChip from "./TagChip";
-import { getDownloadUrlForModel } from "../services/downloadHelpers";
-import { useModelDownloader } from "../services/useModelDownloader";
 
 interface ModelCardProps {
     model: HuggingFaceModel;
@@ -17,8 +17,7 @@ interface ModelCardProps {
 export default function ModelCard({ model }: ModelCardProps) {
     const { author, name } = parseModelId(model.id);
 
-    const { startDownload, cancelDownload, progress, isDownloading } =
-        useModelDownloader();
+    const { startDownload, cancelDownload, initDownload, progress, isDownloading } = useModelDownloader(model);
 
     return (
         <View style={styles.card}>
@@ -27,24 +26,12 @@ export default function ModelCard({ model }: ModelCardProps) {
 
             <View style={styles.metricsRow}>
                 <View style={styles.metric}>
-                    <Ionicons
-                        name="download-outline"
-                        size={16}
-                        color={colors.textSecondary}
-                    />
-                    <Text style={styles.metricText}>
-                        {formatCount(model.downloads)}
-                    </Text>
+                    <Ionicons name="download-outline" size={16} color={colors.textSecondary} />
+                    <Text style={styles.metricText}>{formatCount(model.downloads)}</Text>
                 </View>
                 <View style={styles.metric}>
-                    <Ionicons
-                        name="heart-outline"
-                        size={16}
-                        color={colors.textSecondary}
-                    />
-                    <Text style={styles.metricText}>
-                        {formatCount(model.likes)}
-                    </Text>
+                    <Ionicons name="heart-outline" size={16} color={colors.textSecondary} />
+                    <Text style={styles.metricText}>{formatCount(model.likes)}</Text>
                 </View>
             </View>
 
@@ -77,13 +64,10 @@ export default function ModelCard({ model }: ModelCardProps) {
                     onPress={async () => {
                         // 1. Pass the exact filename from Hugging Face instead of model.id
                         // 2. Capture the returned URI
-                        const localUri = await startDownload(model);
+                        const localUri = await initDownload(model);
 
                         if (localUri) {
-                            console.log(
-                                "Model successfully downloaded and stored at:",
-                                localUri,
-                            );
+                            console.log("Model successfully downloaded and stored at:", localUri);
                         }
                     }}
                     loading={isDownloading}
