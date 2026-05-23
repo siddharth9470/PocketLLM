@@ -1,20 +1,19 @@
-import React from "react";
+import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { Ionicons } from "@expo/vector-icons";
-
-import InitialScreen from "../screens/InitialScreen";
-import ModelsScreen from "../screens/models/ModelsScreen";
+import React from "react";
+import { colors } from "../constants/theme";
 import ChatListScreen from "../screens/chats/ChatListScreen";
 import ChatScreen from "../screens/chats/ChatScreen";
+import InitialScreen from "../screens/InitialScreen";
+import DownloadedModelsScreen from "../screens/models/DownloadedModelsScreen";
+import ModelsScreen from "../screens/models/ModelsScreen";
 import SettingsScreen from "../screens/settings/SettingsScreen";
-
-import { colors } from "../constants/theme";
 import type {
-    RootStackParamList,
+    ChatsStackParamList,
     MainTabParamList,
     ModelsStackParamList,
-    ChatsStackParamList,
+    RootStackParamList,
     SettingsStackParamList,
 } from "./types";
 
@@ -28,11 +27,7 @@ export default function CentralNavigator() {
     return (
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
             <RootStack.Screen name="Initial" component={InitialScreen} />
-            <RootStack.Screen
-                name="Main"
-                component={MainTab}
-                options={{ headerShown: false }}
-            />
+            <RootStack.Screen name="Main" component={MainTab} options={{ headerShown: false }} />
         </RootStack.Navigator>
     );
 }
@@ -51,30 +46,14 @@ function MainTab() {
                     borderTopColor: colors.border,
                 },
                 tabBarIcon: ({ color, size }) => {
-                    const iconName = getTabIcon(
-                        route.name as keyof MainTabParamList,
-                    );
-                    return (
-                        <Ionicons name={iconName} size={size} color={color} />
-                    );
+                    const iconName = getTabIcon(route.name as keyof MainTabParamList);
+                    return <Ionicons name={iconName} size={size} color={color} />;
                 },
             })}
         >
-            <Tab.Screen
-                name="ModelsTab"
-                component={ModelsStackNavigator}
-                options={{ title: "Models" }}
-            />
-            <Tab.Screen
-                name="ChatsTab"
-                component={ChatsStackNavigator}
-                options={{ title: "Chats" }}
-            />
-            <Tab.Screen
-                name="SettingsTab"
-                component={SettingsStackNavigator}
-                options={{ title: "Settings" }}
-            />
+            <Tab.Screen name="ModelsTab" component={ModelsStackNavigator} options={{ title: "Models" }} />
+            <Tab.Screen name="ChatsTab" component={ChatsStackNavigator} options={{ title: "Chats" }} />
+            <Tab.Screen name="SettingsTab" component={SettingsStackNavigator} options={{ title: "Settings" }} />
         </Tab.Navigator>
     );
 }
@@ -89,10 +68,11 @@ function ModelsStackNavigator() {
                 contentStyle: { backgroundColor: colors.background },
             }}
         >
+            <ModelsStack.Screen name="Models" component={ModelsScreen} options={{ title: "Models" }} />
             <ModelsStack.Screen
-                name="Models"
-                component={ModelsScreen}
-                options={{ title: "Models" }}
+                name="DownloadedModels"
+                component={DownloadedModelsScreen}
+                options={{ title: "Downloaded Models" }}
             />
         </ModelsStack.Navigator>
     );
@@ -127,18 +107,12 @@ function SettingsStackNavigator() {
                 contentStyle: { backgroundColor: colors.background },
             }}
         >
-            <SettingsStack.Screen
-                name="Settings"
-                component={SettingsScreen}
-                options={{ title: "Settings" }}
-            />
+            <SettingsStack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
         </SettingsStack.Navigator>
     );
 }
 
-function getTabIcon(
-    routeName: keyof MainTabParamList,
-): keyof typeof Ionicons.glyphMap {
+function getTabIcon(routeName: keyof MainTabParamList): keyof typeof Ionicons.glyphMap {
     switch (routeName) {
         case "ModelsTab":
             return "cube-outline";

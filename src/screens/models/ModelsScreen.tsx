@@ -1,6 +1,6 @@
 import { initLlama, loadLlamaModelInfo } from "llama.rn";
 import { useCallback, useEffect, useState } from "react";
-import { FlatList, StyleSheet, View } from "react-native";
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { getRequest } from "../../api/apiClient";
 import ModelCard from "../../components/ModelCard";
 import { colors, spacing } from "../../constants/theme";
@@ -9,16 +9,28 @@ import { initializeModel, initiateChat } from "../../services/chatHelper";
 import { useModelDownloader } from "../../services/useModelDownloader";
 import type { HuggingFaceModel } from "../../types/models";
 
-export default function ModelsScreen(_props: ModelsStackScreenProps<"Models">) {
+export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
     const [huggingFaceModels, setHFModels] = useState<HuggingFaceModel[]>([]);
     const { startDownload, cancelDownload, downloadProgress, activeDownloads } = useModelDownloader();
+    const { navigation } = props;
+
+    // Add header button to navigate to downloaded models screen
+    useEffect(() => {
+        navigation.setOptions({
+            headerRight: () => (
+                <TouchableOpacity onPress={() => navigation.navigate("DownloadedModels")} style={{ marginRight: 12 }}>
+                    <Text style={{ color: colors.tabActive, fontWeight: "600" }}>Downloaded</Text>
+                </TouchableOpacity>
+            ),
+        });
+    }, [navigation]);
 
     useEffect(() => {
-        initializeModel(
-            "file:///data/user/0/com.app.pocketllm/files/hyperclovax-seed-text-instruct-1.5b-q4_k_m.gguf"
-        ).then(() => {
-            initiateChat("Hi, how are you?").then((res) => console.log(res));
-        });
+        // initializeModel(
+        //     "file:///data/user/0/com.app.pocketllm/files/hyperclovax-seed-text-instruct-1.5b-q4_k_m.gguf"
+        // ).then(() => {
+        //     initiateChat("Hi, how are you?").then((res) => console.log(res));
+        // });
 
         const modelApi =
             "api/models?search=gguf+q4&limit=2000&sort=downloads&direction=-1&expand=pipeline_tag&expand=siblings&expand=tags&expand=likes&expand=private&expand=downloads&expand=createdAt&expand=lastModified&expand=author";

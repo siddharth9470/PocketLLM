@@ -1,6 +1,7 @@
 export interface HuggingFaceModel {
     _id: string;
     id: string;
+    name: string;
     likes: number;
     private: boolean;
     downloads: number;
