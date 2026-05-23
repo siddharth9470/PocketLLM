@@ -16,29 +16,32 @@ export const useModelDownloader = () => {
     // The logbook that holds active native task objects in memory
     const activeTasksRef = useRef<Record<string, DownloadTask>>({});
 
-    // Shared listener attachment logic wrapped in useCallback to prevent dependency warnings
-    const attachListeners = useCallback((task: DownloadTask, modelId: string) => {
+    // Fixed parameter to be a single destructured object to match ProgressHandler type signature
+    const attachTaskListeners = useCallback((task: DownloadTask, modelId: string) => {
         task.progress(({ bytesDownloaded, bytesTotal }: { bytesDownloaded: number; bytesTotal: number }) => {
             const percentage = (bytesDownloaded / bytesTotal) * 100;
+            console.log(`Download percentage for ${modelId}: ${percentage.toFixed(2)}%`);
             setDownloadProgress((prev) => ({
                 ...prev,
                 [modelId]: percentage,
             }));
-        })
-            .done(({ bytesDownloaded, bytesTotal }: { bytesDownloaded: number; bytesTotal: number }) => {
-                console.log(`Download complete for ${modelId}!`, { bytesDownloaded, bytesTotal });
-                delete activeTasksRef.current[modelId];
-                setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
-                setDownloadProgress((prev) => ({ ...prev, [modelId]: 100 }));
+        });
 
-                completeHandler(modelId);
-            })
-            .error(({ error }: { error: any }) => {
-                console.error(`Error downloading ${modelId}:`, error);
-                delete activeTasksRef.current[modelId];
-                setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
-                setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
-            });
+        task.done(({ bytesDownloaded, bytesTotal }: { bytesDownloaded: number; bytesTotal: number }) => {
+            console.log(`Download complete for ${modelId}!`, { bytesDownloaded, bytesTotal });
+            delete activeTasksRef.current[modelId];
+            setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+            setDownloadProgress((prev) => ({ ...prev, [modelId]: 100 }));
+
+            completeHandler(modelId);
+        });
+
+        task.error(({ error }: { error: any }) => {
+            console.error(`Error downloading ${modelId}:`, error);
+            delete activeTasksRef.current[modelId];
+            setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+            setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
+        });
     }, []);
 
     // --- AUTOMATIC RE-ATTACH LOGIC ON MOUNT ---
@@ -55,15 +58,24 @@ export const useModelDownloader = () => {
 
                 console.log(`Recovered ${lostTasks.length} active downloads. Re-linking listeners...`);
 
-                for (const task of lostTasks) {
-                    const modelId = task.id;
+                for (const nativeTask of lostTasks) {
+                    const modelId = nativeTask.id;
 
-                    // Re-populate our tracking objects
-                    activeTasksRef.current[modelId] = task;
+                    // Save instance ref
+                    activeTasksRef.current[modelId] = nativeTask;
                     setActiveDownloads((prev) => ({ ...prev, [modelId]: true }));
 
-                    // Re-attach execution event listeners
-                    attachListeners(task, modelId);
+                    // Re-bind direct event assignments
+                    attachTaskListeners(nativeTask, modelId);
+
+                    // THE CPR FIX: Force the Native OS to resync with the new JS Bridge
+                    nativeTask.pause();
+
+                    // Give the OS 500ms to clear the old memory pointers, then resume it
+                    setTimeout(() => {
+                        nativeTask.resume();
+                        console.log(`Forced native bridge resync for ${modelId}`);
+                    }, 500);
                 }
             } catch (error) {
                 console.error("Failed to reattach background download tasks:", error);
@@ -71,7 +83,7 @@ export const useModelDownloader = () => {
         };
 
         reattachTasks();
-    }, [attachListeners]); // Safely tracked by adding attachListeners here
+    }, [attachTaskListeners]);
 
     const startDownload = async (model: HuggingFaceModel) => {
         const modelDownloadUrl = await getDownloadUrlForModel(model.id);
@@ -90,7 +102,6 @@ export const useModelDownloader = () => {
             return fileUri;
         }
 
-        // If the task is already running, don't duplicate it
         if (activeTasksRef.current[model.id]) {
             console.log(`Download task already running for ${model.id}`);
             return null;
@@ -98,6 +109,7 @@ export const useModelDownloader = () => {
 
         setActiveDownloads((prev) => ({ ...prev, [model.id]: true }));
 
+        // 1. Create a clean base task instance
         const task = createDownloadTask({
             id: model.id,
             url: modelDownloadUrl.url,
@@ -105,11 +117,13 @@ export const useModelDownloader = () => {
             metadata: {},
         });
 
-        // Store the task in our logbook
+        // 2. Map inside our tracking ref instantly
         activeTasksRef.current[model.id] = task;
 
-        // Attach listeners and run it
-        attachListeners(task, model.id);
+        // 3. Attach standard, non-chained progress handlers securely
+        attachTaskListeners(task, model.id);
+
+        // 4. Finally execute the stream download
         task.start();
     };
 
@@ -132,7 +146,7 @@ export const useModelDownloader = () => {
     const cancelDownload = (modelId: string) => {
         const task = activeTasksRef.current[modelId];
         if (task) {
-            task.stop(); // Stops native task completely
+            task.stop();
             delete activeTasksRef.current[modelId];
 
             setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
@@ -146,7 +160,7 @@ export const useModelDownloader = () => {
         pauseDownload,
         resumeDownload,
         cancelDownload,
-        downloadProgress, // Dictionary of percentages mapped by model ID
-        activeDownloads, // Dictionary of boolean download statuses mapped by model ID
+        downloadProgress,
+        activeDownloads,
     };
 };
