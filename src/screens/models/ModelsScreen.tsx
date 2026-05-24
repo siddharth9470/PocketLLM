@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { initLlama, loadLlamaModelInfo } from "llama.rn";
 import { useCallback, useEffect, useState } from "react";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -19,7 +20,7 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
         navigation.setOptions({
             headerRight: () => (
                 <TouchableOpacity onPress={() => navigation.navigate("DownloadedModels")} style={{ marginRight: 12 }}>
-                    <Text style={{ color: colors.tabActive, fontWeight: "600" }}>Downloaded</Text>
+                    <Ionicons name="download-outline" size={20} color={colors.primary} />
                 </TouchableOpacity>
             ),
         });

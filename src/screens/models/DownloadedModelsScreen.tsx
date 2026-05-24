@@ -2,17 +2,17 @@ import { useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import type { DownloadedModel } from "../../storage/modelStorage";
+import type { LocalHuggingFaceModel } from "../../storage/modelStorage";
 import { getDownloadedModels, removeDownloadedModel } from "../../storage/modelStorage";
 
 export default function DownloadedModelsScreen() {
-    const [models, setModels] = useState<DownloadedModel[]>([]);
+    const [models, setModels] = useState<LocalHuggingFaceModel[]>([]);
     const isFocused = useIsFocused();
 
     const load = useCallback(async () => {
         try {
             const map = await getDownloadedModels();
-            const list = Object.values(map).sort((a, b) => b.downloadedAt - a.downloadedAt);
+            const list = Object.values(map).sort((a, b) => (b.downloadedAt ?? 0) - (a.downloadedAt ?? 0));
             setModels(list);
         } catch (err) {
             console.error("Failed to load downloaded models", err);
@@ -28,7 +28,7 @@ export default function DownloadedModelsScreen() {
         return "..." + p.slice(-57);
     };
 
-    const handleDelete = async (item: DownloadedModel) => {
+    const handleDelete = async (item: LocalHuggingFaceModel) => {
         Alert.alert("Delete model", `Delete ${item.name}? This will remove the file and metadata.`, [
             { text: "Cancel", style: "cancel" },
             {
@@ -36,9 +36,12 @@ export default function DownloadedModelsScreen() {
                 style: "destructive",
                 onPress: async () => {
                     try {
-                        const info = await FileSystem.getInfoAsync(item.filePath);
-                        if (info.exists) {
-                            await FileSystem.deleteAsync(item.filePath, { idempotent: true });
+                        const path = item.localFilePath;
+                        if (path) {
+                            const info = await FileSystem.getInfoAsync(path);
+                            if (info.exists) {
+                                await FileSystem.deleteAsync(path, { idempotent: true });
+                            }
                         }
                         await removeDownloadedModel(item.id);
                         await load();
@@ -51,12 +54,12 @@ export default function DownloadedModelsScreen() {
         ]);
     };
 
-    const renderItem = ({ item }: { item: DownloadedModel }) => (
+    const renderItem = ({ item }: { item: LocalHuggingFaceModel }) => (
         <View style={styles.row}>
             <View style={styles.meta}>
                 <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.path}>{shorten(item.filePath)}</Text>
-                <Text style={styles.date}>{new Date(item.downloadedAt).toLocaleString()}</Text>
+                <Text style={styles.path}>{shorten(item.localFilePath ?? "")}</Text>
+                <Text style={styles.date}>{new Date(item.downloadedAt ?? 0).toLocaleString()}</Text>
             </View>
             <TouchableOpacity style={styles.delete} onPress={() => handleDelete(item)}>
                 <Text style={styles.deleteText}>Delete</Text>

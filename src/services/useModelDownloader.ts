@@ -6,7 +6,7 @@ import {
 import type { DownloadTask } from "@kesha-antonov/react-native-background-downloader/src/DownloadTask";
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { removeDownloadedModel, saveDownloadedModel } from "../storage/modelStorage";
+import { getDownloadedModels, saveDownloadedModel } from "../storage/modelStorage";
 import type { HuggingFaceModel } from "../types/models";
 import { getDownloadUrlForModel } from "./downloadHelpers";
 
@@ -38,13 +38,16 @@ export const useModelDownloader = () => {
                 // Persist metadata for fully downloaded model if we have a fileUri
                 try {
                     if (fileUri) {
-                        await saveDownloadedModel({
-                            id: modelId,
-                            name: modelName ?? modelId,
-                            filePath: fileUri,
-                            size: bytesTotal ?? 0,
-                            downloadedAt: Date.now(),
-                        });
+                        const current = await getDownloadedModels();
+                        const existingModel = current[modelId];
+                        if (existingModel) {
+                            await saveDownloadedModel({
+                                ...existingModel,
+                                localFilePath: fileUri,
+                                downloadStatus: "completed",
+                                downloadedAt: Date.now(),
+                            });
+                        }
                     }
                 } catch (err) {
                     console.error("Failed to save downloaded model metadata", err);
@@ -113,11 +116,22 @@ export const useModelDownloader = () => {
 
         const fileUri = FileSystem.documentDirectory + modelDownloadUrl.filename;
 
+        await saveDownloadedModel({
+            ...model,
+            downloadStatus: "pending",
+        });
+
         // Check if the specific file exists
         const fileInfo = await FileSystem.getInfoAsync(fileUri);
         if (fileInfo.exists) {
             console.log("Model already exists at:", fileUri);
             setDownloadProgress((prev) => ({ ...prev, [model.id]: 100 }));
+            await saveDownloadedModel({
+                ...model,
+                localFilePath: fileUri,
+                downloadStatus: "completed",
+                downloadedAt: Date.now(),
+            });
             return fileUri;
         }
 

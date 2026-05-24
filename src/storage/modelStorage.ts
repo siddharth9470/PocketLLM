@@ -1,16 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { HuggingFaceModel } from "../types/models";
 
 const STORAGE_KEY = "downloadedModels_v1";
 
-export interface DownloadedModel {
-    id: string;
-    name: string;
-    filePath: string;
-    size: number; // bytes
-    downloadedAt: number; // epoch ms
-}
+export type LocalHuggingFaceModel = HuggingFaceModel & {
+    localFilePath?: string;
+    downloadStatus: "pending" | "completed";
+    downloadedAt?: number;
+};
 
-type DownloadedMap = Record<string, DownloadedModel>;
+type DownloadedMap = Record<string, LocalHuggingFaceModel>;
 
 export async function getDownloadedModels(): Promise<DownloadedMap> {
     try {
@@ -23,7 +22,7 @@ export async function getDownloadedModels(): Promise<DownloadedMap> {
     }
 }
 
-export async function saveDownloadedModel(model: DownloadedModel): Promise<void> {
+export async function saveDownloadedModel(model: LocalHuggingFaceModel): Promise<void> {
     try {
         const current = await getDownloadedModels();
         current[model.id] = model;
@@ -47,5 +46,5 @@ export async function removeDownloadedModel(modelId: string): Promise<void> {
 
 export async function isModelDownloaded(modelId: string): Promise<boolean> {
     const current = await getDownloadedModels();
-    return Boolean(current[modelId]);
+    return current[modelId]?.downloadStatus === "completed";
 }
