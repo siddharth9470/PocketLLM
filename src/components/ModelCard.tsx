@@ -30,11 +30,11 @@ export default function ModelCard(props: ModelCardProps) {
     const downloading = typeof isDownloading === "boolean" ? isDownloading : activeDownload;
     const currentProgress = typeof props.progress === "number" ? props.progress : downloadProgress;
 
-    const { author, name } = parseModelId(model.id);
+    const { name } = parseModelId(model.id);
 
     return (
         <View style={styles.card}>
-            <Text style={styles.author}>{author}</Text>
+            <Text style={styles.author}>{model.author}</Text>
             <Text style={styles.name}>{name}</Text>
 
             <View style={styles.metricsRow}>
@@ -68,7 +68,7 @@ export default function ModelCard(props: ModelCardProps) {
                 </>
             ) : (
                 <PrimaryButton
-                    label={isDownloaded ? "Open" : "Download"}
+                    label={activeDownload ? "Open" : "Download"}
                     onPress={async () => onClickDownload(model)}
                     loading={activeDownload}
                     variant={isDownloaded ? "secondary" : "primary"}

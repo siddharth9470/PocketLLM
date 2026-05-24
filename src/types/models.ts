@@ -6,6 +6,7 @@ export interface HuggingFaceModel {
     private: boolean;
     downloads: number;
     tags: string[];
+    author: string;
     library_name: string;
     createdAt: string;
     modelId: string;

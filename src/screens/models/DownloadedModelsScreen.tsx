@@ -57,7 +57,7 @@ export default function DownloadedModelsScreen() {
     const renderItem = ({ item }: { item: LocalHuggingFaceModel }) => (
         <View style={styles.row}>
             <View style={styles.meta}>
-                <Text style={styles.name}>{item.name}</Text>
+                <Text style={styles.name}>{item._id}</Text>
                 <Text style={styles.path}>{shorten(item.localFilePath ?? "")}</Text>
                 <Text style={styles.date}>{new Date(item.downloadedAt ?? 0).toLocaleString()}</Text>
             </View>
