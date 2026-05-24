@@ -22,6 +22,22 @@ export async function getDownloadedModels(): Promise<DownloadedMap> {
     }
 }
 
+export async function getDownloadedModelsList(): Promise<LocalHuggingFaceModel[]> {
+    /*
+        This function get the mapping of all the model from local storgare, sort/filter with
+        some conditions and return
+     */
+    try {
+        const map = await getDownloadedModels();
+        return Object.values(map)
+            .sort((a, b) => (b.downloadedAt ?? 0) - (a.downloadedAt ?? 0))
+            .filter((model) => model.localFilePath !== undefined);
+    } catch (error) {
+        console.error("getDownloadedModels error", error);
+        return [];
+    }
+}
+
 export async function saveDownloadedModel(model: LocalHuggingFaceModel): Promise<void> {
     try {
         const current = await getDownloadedModels();

@@ -3,7 +3,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { LocalHuggingFaceModel } from "../../storage/modelStorage";
-import { getDownloadedModels, removeDownloadedModel } from "../../storage/modelStorage";
+import { getDownloadedModelsList, removeDownloadedModel } from "../../storage/modelStorage";
 
 export default function DownloadedModelsScreen() {
     const [models, setModels] = useState<LocalHuggingFaceModel[]>([]);
@@ -11,9 +11,8 @@ export default function DownloadedModelsScreen() {
 
     const load = useCallback(async () => {
         try {
-            const map = await getDownloadedModels();
-            const list = Object.values(map).sort((a, b) => (b.downloadedAt ?? 0) - (a.downloadedAt ?? 0));
-            setModels(list);
+            const modelsFromLocalStorage = await getDownloadedModelsList();
+            setModels(modelsFromLocalStorage);
         } catch (err) {
             console.error("Failed to load downloaded models", err);
         }

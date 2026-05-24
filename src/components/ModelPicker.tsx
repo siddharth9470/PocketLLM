@@ -3,7 +3,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { colors, radii, spacing, typography } from "../constants/theme";
-import { getDownloadedModels, LocalHuggingFaceModel } from "../storage/modelStorage";
+import { getDownloadedModels, getDownloadedModelsList, LocalHuggingFaceModel } from "../storage/modelStorage";
 import { HuggingFaceModel } from "../types/models";
 import { parseModelId } from "../utils/parseModelId";
 
@@ -21,11 +21,10 @@ export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
 
     const load = useCallback(async () => {
         try {
-            const map = await getDownloadedModels();
-            const list = Object.values(map).sort((a, b) => (b.downloadedAt ?? 0) - (a.downloadedAt ?? 0));
-            console.log(JSON.stringify(list));
-            setAvailableModel(list);
-            setSelectedModel(list[0]);
+            const modelsFromLocalStorage = await getDownloadedModelsList();
+
+            setAvailableModel(modelsFromLocalStorage);
+            setSelectedModel(modelsFromLocalStorage[0]);
         } catch (err) {
             console.error("Failed to load downloaded models", err);
         }
