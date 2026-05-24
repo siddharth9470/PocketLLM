@@ -18,53 +18,49 @@ export const useModelDownloader = () => {
     const activeTasksRef = useRef<Record<string, DownloadTask>>({});
 
     // Fixed parameter to be a single destructured object to match ProgressHandler type signature
-    const attachTaskListeners = useCallback(
-        (task: DownloadTask, modelId: string, fileUri?: string, modelName?: string) => {
-            task.progress(({ bytesDownloaded, bytesTotal }: { bytesDownloaded: number; bytesTotal: number }) => {
-                const percentage = (bytesDownloaded / bytesTotal) * 100;
-                console.log(`Download percentage for ${modelId}: ${percentage.toFixed(2)}%`);
-                setDownloadProgress((prev) => ({
-                    ...prev,
-                    [modelId]: percentage,
-                }));
-            });
+    const attachTaskListeners = useCallback((task: DownloadTask, modelId: string, modelName?: string) => {
+        task.progress(({ bytesDownloaded, bytesTotal }: { bytesDownloaded: number; bytesTotal: number }) => {
+            const percentage = (bytesDownloaded / bytesTotal) * 100;
+            console.log(`Download percentage for ${modelId}: ${percentage.toFixed(2)}%`);
+            setDownloadProgress((prev) => ({
+                ...prev,
+                [modelId]: percentage,
+            }));
+        });
 
-            task.done(async ({ bytesDownloaded, bytesTotal }: { bytesDownloaded: number; bytesTotal: number }) => {
-                console.log(`Download complete for ${modelId}!`, { bytesDownloaded, bytesTotal });
-                delete activeTasksRef.current[modelId];
-                setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
-                setDownloadProgress((prev) => ({ ...prev, [modelId]: 100 }));
+        task.done(async ({ bytesDownloaded, bytesTotal }: { bytesDownloaded: number; bytesTotal: number }) => {
+            const fileUri = task.metadata.fileUri as string;
+            console.log(`Download complete for ${modelId}!`, { bytesDownloaded, bytesTotal, fileUri });
+            delete activeTasksRef.current[modelId];
+            setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+            setDownloadProgress((prev) => ({ ...prev, [modelId]: 100 }));
 
-                // Persist metadata for fully downloaded model if we have a fileUri
-                try {
-                    if (fileUri) {
-                        const current = await getDownloadedModels();
-                        const existingModel = current[modelId];
-                        if (existingModel) {
-                            await saveDownloadedModel({
-                                ...existingModel,
-                                localFilePath: fileUri,
-                                downloadStatus: "completed",
-                                downloadedAt: Date.now(),
-                            });
-                        }
-                    }
-                } catch (err) {
-                    console.error("Failed to save downloaded model metadata", err);
+            // Persist metadata for fully downloaded model if we have a fileUri
+            try {
+                const current = await getDownloadedModels();
+                const existingModel = current[modelId];
+                if (existingModel) {
+                    await saveDownloadedModel({
+                        ...existingModel,
+                        localFilePath: fileUri,
+                        downloadStatus: "completed",
+                        downloadedAt: Date.now(),
+                    });
                 }
+            } catch (err) {
+                console.error("Failed to save downloaded model metadata", err);
+            }
 
-                completeHandler(modelId);
-            });
+            completeHandler(modelId);
+        });
 
-            task.error(({ error }: { error: any }) => {
-                console.error(`Error downloading ${modelId}:`, error);
-                delete activeTasksRef.current[modelId];
-                setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
-                setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
-            });
-        },
-        []
-    );
+        task.error(({ error }: { error: any }) => {
+            console.error(`Error downloading ${modelId}:`, error);
+            delete activeTasksRef.current[modelId];
+            setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+            setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
+        });
+    }, []);
 
     // --- AUTOMATIC RE-ATTACH LOGIC ON MOUNT ---
     useEffect(() => {
@@ -147,14 +143,14 @@ export const useModelDownloader = () => {
             id: model.id,
             url: modelDownloadUrl.url,
             destination: fileUri,
-            metadata: {},
+            metadata: { fileUri: fileUri },
         });
 
         // 2. Map inside our tracking ref instantly
         activeTasksRef.current[model.id] = task;
 
         // 3. Attach standard, non-chained progress handlers securely (pass fileUri so completion can persist)
-        attachTaskListeners(task, model.id, fileUri, model.name ?? model.id);
+        attachTaskListeners(task, model.id, model.name ?? model.id);
 
         // 4. Finally execute the stream download
         task.start();
