@@ -12,10 +12,23 @@ interface ModelCardProps {
     downloadProgress: number;
     activeDownload: boolean;
     onClickDownload: (item: HuggingFaceModel) => void;
+    isDownloaded?: boolean;
+    isDownloading?: boolean;
+    progress?: number;
 }
 
 export default function ModelCard(props: ModelCardProps) {
-    const { model, onClickDownload, downloadProgress, activeDownload } = props;
+    const {
+        model,
+        onClickDownload,
+        downloadProgress,
+        activeDownload,
+        isDownloaded = false,
+        isDownloading,
+        progress = 0,
+    } = props;
+    const downloading = typeof isDownloading === "boolean" ? isDownloading : activeDownload;
+    const currentProgress = typeof props.progress === "number" ? props.progress : downloadProgress;
 
     const { author, name } = parseModelId(model.id);
 
@@ -46,25 +59,20 @@ export default function ModelCard(props: ModelCardProps) {
                 ))}
             </ScrollView>
 
-            {activeDownload ? (
+            {downloading ? (
                 <>
                     <View style={styles.progressTrack}>
-                        <View
-                            style={[
-                                styles.progressFill,
-                                { width: `${downloadProgress}%` }, // Updated to use the hook's progress
-                            ]}
-                        />
+                        <View style={[styles.progressFill, { width: `${currentProgress}%` }]} />
                     </View>
-                    <Text style={styles.progressText}>{downloadProgress}%</Text>
+                    <Text style={styles.progressText}>Downloading {Math.round(currentProgress)}%</Text>
                 </>
             ) : (
                 <PrimaryButton
-                    label={"Download"}
+                    label={isDownloaded ? "Open" : "Download"}
                     onPress={async () => onClickDownload(model)}
                     loading={activeDownload}
-                    // disabled={isCompleted || isDownloading}
-                    // variant={isCompleted ? "success" : "primary"}
+                    variant={isDownloaded ? "secondary" : "primary"}
+                    style={[styles.downloadButton, isDownloaded && styles.completedButton]}
                 />
             )}
         </View>
@@ -130,5 +138,13 @@ const styles = StyleSheet.create({
         color: colors.textSecondary,
         marginBottom: spacing.md,
         alignSelf: "center",
+    },
+    downloadButton: {
+        backgroundColor: colors.primary,
+    },
+    completedButton: {
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.primary,
     },
 });
