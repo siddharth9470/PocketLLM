@@ -6,7 +6,7 @@ import {
 import type { DownloadTask } from "@kesha-antonov/react-native-background-downloader/src/DownloadTask";
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getDownloadedModels, saveDownloadedModel } from "../storage/modelStorage";
+import { getDownloadedModels, getDownloadedModelsList, saveDownloadedModel } from "../storage/modelStorage";
 import type { HuggingFaceModel } from "../types/models";
 import { getDownloadUrlForModel } from "./downloadHelpers";
 
@@ -114,7 +114,9 @@ export const useModelDownloader = () => {
 
         await saveDownloadedModel({
             ...model,
+            localFilePath: fileUri,
             downloadStatus: "pending",
+            downloadedAt: undefined,
         });
 
         // Check if the specific file exists
@@ -124,7 +126,6 @@ export const useModelDownloader = () => {
             setDownloadProgress((prev) => ({ ...prev, [model.id]: 100 }));
             await saveDownloadedModel({
                 ...model,
-                localFilePath: fileUri,
                 downloadStatus: "completed",
                 downloadedAt: Date.now(),
             });
@@ -184,6 +185,37 @@ export const useModelDownloader = () => {
         }
     };
 
+    const retreiveCompletedDownloads = async () => {
+        /**
+         * This function retrieves the list of downloads that were completed
+         *  in the background while the application was closed.
+         * It checks all pending downloads and sets their status to completed.
+         */
+
+        const modelsFromLocalStorage = await getDownloadedModelsList();
+
+        for await (const model of modelsFromLocalStorage) {
+            if (model.downloadStatus === "pending") {
+                const isModelExist = await isFileAlreadyExistInLocalStorage(model.localFilePath);
+
+                if (isModelExist) {
+                    await saveDownloadedModel({
+                        ...model,
+                        downloadStatus: "completed",
+                        downloadedAt: Date.now(),
+                    });
+                    console.log(`Pending Download Model ${model.name}`);
+                }
+            }
+        }
+    };
+
+    const isFileAlreadyExistInLocalStorage = async (fileUri: string | undefined): Promise<boolean> => {
+        if (!fileUri) return false;
+        const fileInfo = await FileSystem.getInfoAsync(fileUri);
+        return fileInfo.exists;
+    };
+
     return {
         startDownload,
         pauseDownload,
@@ -191,5 +223,6 @@ export const useModelDownloader = () => {
         cancelDownload,
         downloadProgress,
         activeDownloads,
+        retreiveCompletedDownloads,
     };
 };

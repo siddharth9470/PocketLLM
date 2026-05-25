@@ -12,7 +12,8 @@ import type { HuggingFaceModel } from "../../types/models";
 
 export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
     const [huggingFaceModels, setHFModels] = useState<HuggingFaceModel[]>([]);
-    const { startDownload, cancelDownload, downloadProgress, activeDownloads } = useModelDownloader();
+    const { startDownload, cancelDownload, downloadProgress, activeDownloads, retreiveCompletedDownloads } =
+        useModelDownloader();
     const { navigation } = props;
 
     // Add header button to navigate to downloaded models screen
@@ -32,11 +33,14 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
         // ).then(() => {
         //     initiateChat("Hi, how are you?").then((res) => console.log(res));
         // });
-
+        retreiveCompletedDownloads();
         const modelApi =
             "api/models?search=gguf+q4&limit=2000&sort=downloads&direction=-1&expand=pipeline_tag&expand=siblings&expand=tags&expand=likes&expand=private&expand=downloads&expand=createdAt&expand=lastModified&expand=author";
-        getRequest(modelApi).then((res) => {
-            setHFModels(res.data as HuggingFaceModel[]);
+        console.log("data");
+        fetch(modelApi).then((res) => {
+            res.json().then((data) => {
+                setHFModels(data as HuggingFaceModel[]);
+            });
         });
     }, []);
 

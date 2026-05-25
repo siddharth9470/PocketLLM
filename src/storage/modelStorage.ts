@@ -31,7 +31,7 @@ export async function getDownloadedModelsList(): Promise<LocalHuggingFaceModel[]
         const map = await getDownloadedModels();
         return Object.values(map)
             .sort((a, b) => (b.downloadedAt ?? 0) - (a.downloadedAt ?? 0))
-            .filter((model) => model.localFilePath !== undefined);
+            .filter((model) => model.downloadedAt !== undefined);
     } catch (error) {
         console.error("getDownloadedModels error", error);
         return [];

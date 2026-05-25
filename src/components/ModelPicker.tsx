@@ -24,7 +24,6 @@ export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
             const modelsFromLocalStorage = await getDownloadedModelsList();
 
             setAvailableModel(modelsFromLocalStorage);
-            setSelectedModel(modelsFromLocalStorage[0]);
         } catch (err) {
             console.error("Failed to load downloaded models", err);
         }
@@ -43,7 +42,6 @@ export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
         [onSelectModel]
     );
 
-    // 2. Render the memoized item
     const renderModels = useCallback(
         ({ item }: { item: LocalHuggingFaceModel }) => {
             const isSelected = item.id === selectedModel?.id;
@@ -57,7 +55,7 @@ export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
             <Pressable style={styles.trigger} onPress={() => setVisible(true)}>
                 <Ionicons name="hardware-chip-outline" size={16} color={colors.primary} />
                 <Text style={styles.triggerText} numberOfLines={1}>
-                    {selectedModel?.author}
+                    {selectedModel ? parseModelId(selectedModel.id).name : "Select a Modal"}
                 </Text>
                 <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
             </Pressable>
@@ -113,7 +111,8 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.xs,
-        maxWidth: 180,
+        maxWidth: "100%",
+        alignSelf: "flex-end",
         backgroundColor: colors.chipBackground,
         borderRadius: radii.pill,
         paddingHorizontal: spacing.md,
