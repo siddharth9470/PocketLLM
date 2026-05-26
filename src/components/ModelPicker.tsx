@@ -3,12 +3,12 @@ import { useIsFocused } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { colors, radii, spacing, typography } from "../constants/theme";
-import { getDownloadedModels, getDownloadedModelsList, LocalHuggingFaceModel } from "../storage/modelStorage";
-import { HuggingFaceModel } from "../types/models";
+import { getDownloadedModelsList } from "../storage/modelStorage";
+import type { HuggingFaceModel } from "../types/models";
 import { parseModelId } from "../utils/parseModelId";
 
 interface ModelPickerProps {
-    onSelectModel: (model: LocalHuggingFaceModel) => void;
+    onSelectModel: (model: HuggingFaceModel) => void;
 }
 
 export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
@@ -16,8 +16,8 @@ export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
 
     const [visible, setVisible] = useState(false);
 
-    const [availableModel, setAvailableModel] = useState<LocalHuggingFaceModel[]>([]);
-    const [selectedModel, setSelectedModel] = useState<LocalHuggingFaceModel | undefined>();
+    const [availableModel, setAvailableModel] = useState<HuggingFaceModel[]>([]);
+    const [selectedModel, setSelectedModel] = useState<HuggingFaceModel | undefined>();
 
     const load = useCallback(async () => {
         try {
@@ -34,7 +34,7 @@ export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
     }, [isFocused, load]);
 
     const handleSelect = useCallback(
-        (item: LocalHuggingFaceModel) => {
+        (item: HuggingFaceModel) => {
             setSelectedModel(item);
             onSelectModel(item);
             setVisible(false);
@@ -43,7 +43,7 @@ export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
     );
 
     const renderModels = useCallback(
-        ({ item }: { item: LocalHuggingFaceModel }) => {
+        ({ item }: { item: HuggingFaceModel }) => {
             const isSelected = item.id === selectedModel?.id;
             return <ModelListItem item={item} isSelected={isSelected} onSelect={handleSelect} />;
         },
@@ -88,9 +88,9 @@ const ModelListItem = memo(
         isSelected,
         onSelect,
     }: {
-        item: LocalHuggingFaceModel;
+        item: HuggingFaceModel;
         isSelected: boolean;
-        onSelect: (item: LocalHuggingFaceModel) => void;
+        onSelect: (item: HuggingFaceModel) => void;
     }) => {
         const { author, name } = parseModelId(item.id);
 

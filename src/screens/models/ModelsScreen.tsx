@@ -33,9 +33,9 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
         // ).then(() => {
         //     initiateChat("Hi, how are you?").then((res) => console.log(res));
         // });
-        retreiveCompletedDownloads();
+        // retreiveCompletedDownloads();
         const modelApi =
-            "api/models?search=gguf+q4&limit=2000&sort=downloads&direction=-1&expand=pipeline_tag&expand=siblings&expand=tags&expand=likes&expand=private&expand=downloads&expand=createdAt&expand=lastModified&expand=author";
+            "https://huggingface.co/api/models?search=gguf+q4&limit=2000&sort=downloads&direction=-1&expand=pipeline_tag&expand=siblings&expand=tags&expand=likes&expand=private&expand=downloads&expand=createdAt&expand=lastModified&expand=author";
         console.log("data");
         fetch(modelApi).then((res) => {
             res.json().then((data) => {

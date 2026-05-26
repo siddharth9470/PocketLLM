@@ -3,15 +3,9 @@ import type { HuggingFaceModel } from "../types/models";
 
 const STORAGE_KEY = "downloadedModels_v1";
 
-export type LocalHuggingFaceModel = HuggingFaceModel & {
-    localFilePath?: string;
-    downloadStatus: "pending" | "completed";
-    downloadedAt?: number;
-};
+type DownloadedMap = Record<string, HuggingFaceModel>;
 
-type DownloadedMap = Record<string, LocalHuggingFaceModel>;
-
-export async function getDownloadedModels(): Promise<DownloadedMap> {
+export async function getDownloadedModels(): Promise<Record<string, HuggingFaceModel>> {
     try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (!raw) return {};
@@ -22,7 +16,7 @@ export async function getDownloadedModels(): Promise<DownloadedMap> {
     }
 }
 
-export async function getDownloadedModelsList(): Promise<LocalHuggingFaceModel[]> {
+export async function getDownloadedModelsList(): Promise<HuggingFaceModel[]> {
     /*
         This function get the mapping of all the model from local storgare, sort/filter with
         some conditions and return
@@ -30,15 +24,15 @@ export async function getDownloadedModelsList(): Promise<LocalHuggingFaceModel[]
     try {
         const map = await getDownloadedModels();
         return Object.values(map)
-            .sort((a, b) => (b.downloadedAt ?? 0) - (a.downloadedAt ?? 0))
-            .filter((model) => model.downloadedAt !== undefined);
+            .sort((a, b) => (b.downloadInfo?.downloadedAt ?? 0) - (a.downloadInfo?.downloadedAt ?? 0))
+            .filter((model) => model.downloadInfo?.downloadedAt !== undefined);
     } catch (error) {
         console.error("getDownloadedModels error", error);
         return [];
     }
 }
 
-export async function saveDownloadedModel(model: LocalHuggingFaceModel): Promise<void> {
+export async function saveDownloadedModel(model: HuggingFaceModel): Promise<void> {
     try {
         const current = await getDownloadedModels();
         current[model.id] = model;
@@ -62,5 +56,5 @@ export async function removeDownloadedModel(modelId: string): Promise<void> {
 
 export async function isModelDownloaded(modelId: string): Promise<boolean> {
     const current = await getDownloadedModels();
-    return current[modelId]?.downloadStatus === "completed";
+    return current[modelId]?.downloadInfo?.status === "completed";
 }

@@ -42,9 +42,12 @@ export const useModelDownloader = () => {
                 if (existingModel) {
                     await saveDownloadedModel({
                         ...existingModel,
-                        localFilePath: fileUri,
-                        downloadStatus: "completed",
-                        downloadedAt: Date.now(),
+                        downloadInfo: {
+                            ...(existingModel.downloadInfo ?? {}),
+                            localFilePath: fileUri,
+                            status: "completed",
+                            downloadedAt: Date.now(),
+                        },
                     });
                 }
             } catch (err) {
@@ -114,9 +117,12 @@ export const useModelDownloader = () => {
 
         await saveDownloadedModel({
             ...model,
-            localFilePath: fileUri,
-            downloadStatus: "pending",
-            downloadedAt: undefined,
+            downloadInfo: {
+                ...(model.downloadInfo ?? {}),
+                localFilePath: fileUri,
+                status: "pending",
+                downloadedAt: undefined,
+            },
         });
 
         // Check if the specific file exists
@@ -126,8 +132,12 @@ export const useModelDownloader = () => {
             setDownloadProgress((prev) => ({ ...prev, [model.id]: 100 }));
             await saveDownloadedModel({
                 ...model,
-                downloadStatus: "completed",
-                downloadedAt: Date.now(),
+                downloadInfo: {
+                    ...(model.downloadInfo ?? {}),
+                    status: "completed",
+                    downloadedAt: Date.now(),
+                    localFilePath: fileUri,
+                },
             });
             return fileUri;
         }
@@ -195,14 +205,17 @@ export const useModelDownloader = () => {
         const modelsFromLocalStorage = await getDownloadedModelsList();
 
         for await (const model of modelsFromLocalStorage) {
-            if (model.downloadStatus === "pending") {
-                const isModelExist = await isFileAlreadyExistInLocalStorage(model.localFilePath);
+            if (model.downloadInfo?.status === "pending") {
+                const isModelExist = await isFileAlreadyExistInLocalStorage(model.downloadInfo?.localFilePath);
 
                 if (isModelExist) {
                     await saveDownloadedModel({
                         ...model,
-                        downloadStatus: "completed",
-                        downloadedAt: Date.now(),
+                        downloadInfo: {
+                            ...(model.downloadInfo ?? {}),
+                            status: "completed",
+                            downloadedAt: Date.now(),
+                        },
                     });
                     console.log(`Pending Download Model ${model.name}`);
                 }

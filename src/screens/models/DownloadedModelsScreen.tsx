@@ -2,11 +2,11 @@ import { useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import type { LocalHuggingFaceModel } from "../../storage/modelStorage";
 import { getDownloadedModelsList, removeDownloadedModel } from "../../storage/modelStorage";
+import type { HuggingFaceModel } from "../../types/models";
 
 export default function DownloadedModelsScreen() {
-    const [models, setModels] = useState<LocalHuggingFaceModel[]>([]);
+    const [models, setModels] = useState<HuggingFaceModel[]>([]);
     const isFocused = useIsFocused();
 
     const load = useCallback(async () => {
@@ -27,7 +27,7 @@ export default function DownloadedModelsScreen() {
         return "..." + p.slice(-57);
     };
 
-    const handleDelete = async (item: LocalHuggingFaceModel) => {
+    const handleDelete = async (item: HuggingFaceModel) => {
         Alert.alert("Delete model", `Delete ${item.name}? This will remove the file and metadata.`, [
             { text: "Cancel", style: "cancel" },
             {
@@ -35,7 +35,7 @@ export default function DownloadedModelsScreen() {
                 style: "destructive",
                 onPress: async () => {
                     try {
-                        const path = item.localFilePath;
+                        const path = item.downloadInfo?.localFilePath;
                         if (path) {
                             const info = await FileSystem.getInfoAsync(path);
                             if (info.exists) {
@@ -53,12 +53,12 @@ export default function DownloadedModelsScreen() {
         ]);
     };
 
-    const renderItem = ({ item }: { item: LocalHuggingFaceModel }) => (
+    const renderItem = ({ item }: { item: HuggingFaceModel }) => (
         <View style={styles.row}>
             <View style={styles.meta}>
                 <Text style={styles.name}>{item._id}</Text>
-                <Text style={styles.path}>{shorten(item.localFilePath ?? "")}</Text>
-                <Text style={styles.date}>{new Date(item.downloadedAt ?? 0).toLocaleString()}</Text>
+                <Text style={styles.path}>{shorten(item.downloadInfo?.localFilePath ?? "")}</Text>
+                <Text style={styles.date}>{new Date(item.downloadInfo?.downloadedAt ?? 0).toLocaleString()}</Text>
             </View>
             <TouchableOpacity style={styles.delete} onPress={() => handleDelete(item)}>
                 <Text style={styles.deleteText}>Delete</Text>
