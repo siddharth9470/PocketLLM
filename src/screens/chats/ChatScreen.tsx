@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useHeaderHeight } from "@react-navigation/elements";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
-
+import { GiftedChat } from "react-native-gifted-chat";
 import ChatBubble from "../../components/ChatBubble";
 import ModelPicker from "../../components/ModelPicker";
 import { colors, radii, spacing } from "../../constants/theme";
@@ -18,9 +19,11 @@ export default function ChatScreen({ navigation, route }: ChatsStackScreenProps<
     const [draft, setDraft] = useState("");
     const listRef = useRef<FlatList>(null);
 
-    const messages = conversation?.messages ?? [];
+    //const messages = conversation?.messages ?? [];
 
     const [selectedModel, setSelectedModel] = useState<HuggingFaceModel | undefined>();
+
+    const [messages, setMessages] = useState<any>([]);
 
     const handleSend = () => {
         if (!draft.trim()) {
@@ -32,40 +35,42 @@ export default function ChatScreen({ navigation, route }: ChatsStackScreenProps<
         requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     };
 
+    useEffect(() => {
+        setMessages([
+            {
+                _id: 1,
+                text: "Hello developer",
+                createdAt: new Date(),
+                user: {
+                    _id: 2,
+                    name: "John Doe",
+                    avatar: "https://placeimg.com/140/140/any",
+                },
+            },
+        ]);
+    }, []);
+
+    const onSend = useCallback((messages = []) => {
+        setMessages((previousMessages: any) => GiftedChat.append(previousMessages, messages));
+    }, []);
+
+    const headerHeight = useHeaderHeight();
+
     return (
         <KeyboardAvoidingView
             style={styles.container}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
-            keyboardVerticalOffset={90}
+            keyboardVerticalOffset={150}
         >
             <ModelPicker onSelectModel={(model) => setSelectedModel(model)} />
 
-            <FlatList
-                ref={listRef}
-                data={messages}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => <ChatBubble message={item} />}
-                contentContainerStyle={styles.messagesContent}
-                onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+            <GiftedChat
+                messages={messages}
+                onSend={(messages: any) => onSend(messages)}
+                user={{
+                    _id: 1,
+                }}
             />
-
-            <View style={styles.composer}>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Message"
-                    placeholderTextColor={colors.textTertiary}
-                    value={draft}
-                    onChangeText={setDraft}
-                    multiline
-                />
-                <Pressable
-                    style={[styles.sendButton, !draft.trim() && styles.sendButtonDisabled]}
-                    onPress={handleSend}
-                    disabled={!draft.trim()}
-                >
-                    <Ionicons name="arrow-up" size={20} color={colors.surface} />
-                </Pressable>
-            </View>
         </KeyboardAvoidingView>
     );
 }
