@@ -1,11 +1,13 @@
-import { Pressable, FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors, spacing, typography } from '../../constants/theme';
-import type { ChatsStackScreenProps } from '../../navigation/types';
-import { useChatStore } from '../../stores/chatStore';
-import { parseModelId } from '../../utils/parseModelId';
+import { colors, spacing, typography } from "../../constants/theme";
+import type { ChatsStackScreenProps } from "../../navigation/types";
+import { useChatStore } from "../../stores/chatStore";
+import { parseModelId } from "../../utils/parseModelId";
 
-export default function ChatListScreen({ navigation }: ChatsStackScreenProps<'ChatList'>) {
+export default function ChatListScreen({
+  navigation,
+}: ChatsStackScreenProps<"ChatList">) {
   const conversations = useChatStore((state) => state.conversations);
 
   return (
@@ -21,7 +23,7 @@ export default function ChatListScreen({ navigation }: ChatsStackScreenProps<'Ch
             <Pressable
               style={styles.row}
               onPress={() =>
-                navigation.navigate('Chat', {
+                navigation.navigate("Chat", {
                   conversationId: item.id,
                   title: item.title,
                 })
@@ -54,8 +56,8 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.surface,
     borderRadius: 12,
     padding: spacing.lg,

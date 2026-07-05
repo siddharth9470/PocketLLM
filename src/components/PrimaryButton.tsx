@@ -1,20 +1,20 @@
 import {
   ActivityIndicator,
   Pressable,
+  type StyleProp,
   StyleSheet,
   Text,
-  type StyleProp,
   type ViewStyle,
-} from 'react-native';
+} from "react-native";
 
-import { colors, radii, spacing, typography } from '../constants/theme';
+import { colors, radii, spacing, typography } from "../constants/theme";
 
 interface PrimaryButtonProps {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
-  variant?: 'primary' | 'secondary' | 'success';
+  variant?: "primary" | "secondary" | "success";
   style?: StyleProp<ViewStyle>;
 }
 
@@ -23,7 +23,7 @@ export default function PrimaryButton({
   onPress,
   disabled = false,
   loading = false,
-  variant = 'primary',
+  variant = "primary",
   style,
 }: PrimaryButtonProps) {
   const isDisabled = disabled || loading;
@@ -41,9 +41,16 @@ export default function PrimaryButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'secondary' ? colors.primary : colors.surface} />
+        <ActivityIndicator
+          color={variant === "secondary" ? colors.primary : colors.surface}
+        />
       ) : (
-        <Text style={[styles.label, variant === 'secondary' && styles.secondaryLabel]}>
+        <Text
+          style={[
+            styles.label,
+            variant === "secondary" && styles.secondaryLabel,
+          ]}
+        >
           {label}
         </Text>
       )}
@@ -55,8 +62,8 @@ const styles = StyleSheet.create({
   button: {
     minHeight: 44,
     borderRadius: radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
@@ -67,7 +74,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.chipBackground,
   },
   success: {
-    backgroundColor: '#34C759',
+    backgroundColor: "#34C759",
   },
   pressed: {
     opacity: 0.85,

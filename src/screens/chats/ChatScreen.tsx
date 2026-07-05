@@ -1,5 +1,5 @@
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useCallback, useMemo, type ComponentProps } from "react";
+import { type ComponentProps, useCallback, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { Bubble, GiftedChat, type IMessage } from "react-native-gifted-chat";
 
@@ -8,14 +8,9 @@ import { colors, radii, spacing, typography } from "../../constants/theme";
 import type { ChatsStackScreenProps } from "../../navigation/types";
 import { useChatStore } from "../../stores/chatStore";
 import type { HuggingFaceModel } from "../../types/models";
-import {
-  CHAT_USER,
-  toGiftedChatMessages,
-} from "../../utils/giftedChatAdapter";
+import { CHAT_USER, toGiftedChatMessages } from "../../utils/giftedChatAdapter";
 
-export default function ChatScreen({
-  route,
-}: ChatsStackScreenProps<"Chat">) {
+export default function ChatScreen({ route }: ChatsStackScreenProps<"Chat">) {
   const { conversationId } = route.params;
   const conversation = useChatStore((state) =>
     state.getConversation(conversationId),

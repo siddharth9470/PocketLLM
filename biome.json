@@ -1,25 +1,12 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.8.3/schema.json",
-  "organizeImports": {
-    "enabled": true
+  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "files": {
+    "ignore": ["android/**", "ios/**", "node_modules/**", "dist/**", "build/**"]
   },
   "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true
-    }
+    "enabled": true
   },
   "formatter": {
-    "enabled": true,
-    "formatWithErrors": false,
-    "indentStyle": "space",
-    "indentWidth": 2,
-    "lineEnding": "lf",
-    "lineWidth": 80
-  },
-  "javascript": {
-    "formatter": {
-      "quoteStyle": "double"
-    }
+    "enabled": true
   }
 }

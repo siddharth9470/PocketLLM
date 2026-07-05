@@ -1,241 +1,280 @@
 import {
-    completeHandler,
-    createDownloadTask,
-    getExistingDownloadTasks,
+  completeHandler,
+  createDownloadTask,
+  getExistingDownloadTasks,
 } from "@kesha-antonov/react-native-background-downloader";
 import type { DownloadTask } from "@kesha-antonov/react-native-background-downloader/src/DownloadTask";
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getDownloadedModels, getDownloadedModelsList, saveDownloadedModel } from "../storage/modelStorage";
+import {
+  getDownloadedModels,
+  getDownloadedModelsList,
+  saveDownloadedModel,
+} from "../storage/modelStorage";
 import type { HuggingFaceModel } from "../types/models";
 import { getDownloadUrlForModel } from "./downloadHelpers";
 
 export const useModelDownloader = () => {
-    const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
-    const [activeDownloads, setActiveDownloads] = useState<Record<string, boolean>>({});
+  const [downloadProgress, setDownloadProgress] = useState<
+    Record<string, number>
+  >({});
+  const [activeDownloads, setActiveDownloads] = useState<
+    Record<string, boolean>
+  >({});
 
-    // The logbook that holds active native task objects in memory
-    const activeTasksRef = useRef<Record<string, DownloadTask>>({});
+  // The logbook that holds active native task objects in memory
+  const activeTasksRef = useRef<Record<string, DownloadTask>>({});
 
-    // Fixed parameter to be a single destructured object to match ProgressHandler type signature
-    const attachTaskListeners = useCallback((task: DownloadTask, modelId: string, modelName?: string) => {
-        task.progress(({ bytesDownloaded, bytesTotal }: { bytesDownloaded: number; bytesTotal: number }) => {
-            const percentage = (bytesDownloaded / bytesTotal) * 100;
-            console.log(`Download percentage for ${modelId}: ${percentage.toFixed(2)}%`);
-            setDownloadProgress((prev) => ({
-                ...prev,
-                [modelId]: percentage,
-            }));
-        });
+  // Fixed parameter to be a single destructured object to match ProgressHandler type signature
+  const attachTaskListeners = useCallback(
+    (task: DownloadTask, modelId: string, modelName?: string) => {
+      task.progress(
+        ({
+          bytesDownloaded,
+          bytesTotal,
+        }: {
+          bytesDownloaded: number;
+          bytesTotal: number;
+        }) => {
+          const percentage = (bytesDownloaded / bytesTotal) * 100;
+          console.log(
+            `Download percentage for ${modelId}: ${percentage.toFixed(2)}%`,
+          );
+          setDownloadProgress((prev) => ({
+            ...prev,
+            [modelId]: percentage,
+          }));
+        },
+      );
 
-        task.done(async ({ bytesDownloaded, bytesTotal }: { bytesDownloaded: number; bytesTotal: number }) => {
-            const fileUri = task.metadata.fileUri as string;
-            console.log(`Download complete for ${modelId}!`, { bytesDownloaded, bytesTotal, fileUri });
-            delete activeTasksRef.current[modelId];
-            setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
-            setDownloadProgress((prev) => ({ ...prev, [modelId]: 100 }));
+      task.done(
+        async ({
+          bytesDownloaded,
+          bytesTotal,
+        }: {
+          bytesDownloaded: number;
+          bytesTotal: number;
+        }) => {
+          const fileUri = task.metadata.fileUri as string;
+          console.log(`Download complete for ${modelId}!`, {
+            bytesDownloaded,
+            bytesTotal,
+            fileUri,
+          });
+          delete activeTasksRef.current[modelId];
+          setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+          setDownloadProgress((prev) => ({ ...prev, [modelId]: 100 }));
 
-            // Persist metadata for fully downloaded model if we have a fileUri
-            try {
-                const current = await getDownloadedModels();
-                const existingModel = current[modelId];
-                if (existingModel) {
-                    await saveDownloadedModel({
-                        ...existingModel,
-                        downloadInfo: {
-                            ...(existingModel.downloadInfo ?? {}),
-                            localFilePath: fileUri,
-                            status: "completed",
-                            downloadedAt: Date.now(),
-                        },
-                    });
-                }
-            } catch (err) {
-                console.error("Failed to save downloaded model metadata", err);
+          // Persist metadata for fully downloaded model if we have a fileUri
+          try {
+            const current = await getDownloadedModels();
+            const existingModel = current[modelId];
+            if (existingModel) {
+              await saveDownloadedModel({
+                ...existingModel,
+                downloadInfo: {
+                  ...(existingModel.downloadInfo ?? {}),
+                  localFilePath: fileUri,
+                  status: "completed",
+                  downloadedAt: Date.now(),
+                },
+              });
             }
+          } catch (err) {
+            console.error("Failed to save downloaded model metadata", err);
+          }
 
-            completeHandler(modelId);
-        });
+          completeHandler(modelId);
+        },
+      );
 
-        task.error(({ error }: { error: any }) => {
-            console.error(`Error downloading ${modelId}:`, error);
-            delete activeTasksRef.current[modelId];
-            setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
-            setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
-        });
-    }, []);
+      task.error(({ error }: { error: any }) => {
+        console.error(`Error downloading ${modelId}:`, error);
+        delete activeTasksRef.current[modelId];
+        setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+        setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
+      });
+    },
+    [],
+  );
 
-    // --- AUTOMATIC RE-ATTACH LOGIC ON MOUNT ---
-    useEffect(() => {
-        const reattachTasks = async () => {
-            try {
-                console.log("Scanning for active background downloads...");
-                const lostTasks = await getExistingDownloadTasks();
+  // --- AUTOMATIC RE-ATTACH LOGIC ON MOUNT ---
+  useEffect(() => {
+    const reattachTasks = async () => {
+      try {
+        console.log("Scanning for active background downloads...");
+        const lostTasks = await getExistingDownloadTasks();
 
-                if (lostTasks.length === 0) {
-                    console.log("No active downloads found from previous sessions.");
-                    return;
-                }
-
-                console.log(`Recovered ${lostTasks.length} active downloads. Re-linking listeners...`);
-
-                for (const nativeTask of lostTasks) {
-                    const modelId = nativeTask.id;
-
-                    // Save instance ref
-                    activeTasksRef.current[modelId] = nativeTask;
-                    setActiveDownloads((prev) => ({ ...prev, [modelId]: true }));
-
-                    // Re-bind direct event assignments (no fileUri available during reattach)
-                    attachTaskListeners(nativeTask, modelId);
-
-                    // THE CPR FIX: Force the Native OS to resync with the new JS Bridge
-                    nativeTask.pause();
-
-                    // Give the OS 500ms to clear the old memory pointers, then resume it
-                    setTimeout(() => {
-                        nativeTask.resume();
-                        console.log(`Forced native bridge resync for ${modelId}`);
-                    }, 500);
-                }
-            } catch (error) {
-                console.error("Failed to reattach background download tasks:", error);
-            }
-        };
-
-        reattachTasks();
-    }, [attachTaskListeners]);
-
-    const startDownload = async (model: HuggingFaceModel) => {
-        const modelDownloadUrl = await getDownloadUrlForModel(model.id);
-        if (!modelDownloadUrl) {
-            console.error(`Download failed for model: ${model.id}`);
-            return null;
+        if (lostTasks.length === 0) {
+          console.log("No active downloads found from previous sessions.");
+          return;
         }
 
-        const fileUri = FileSystem.documentDirectory + modelDownloadUrl.filename;
+        console.log(
+          `Recovered ${lostTasks.length} active downloads. Re-linking listeners...`,
+        );
 
-        await saveDownloadedModel({
+        for (const nativeTask of lostTasks) {
+          const modelId = nativeTask.id;
+
+          // Save instance ref
+          activeTasksRef.current[modelId] = nativeTask;
+          setActiveDownloads((prev) => ({ ...prev, [modelId]: true }));
+
+          // Re-bind direct event assignments (no fileUri available during reattach)
+          attachTaskListeners(nativeTask, modelId);
+
+          // THE CPR FIX: Force the Native OS to resync with the new JS Bridge
+          nativeTask.pause();
+
+          // Give the OS 500ms to clear the old memory pointers, then resume it
+          setTimeout(() => {
+            nativeTask.resume();
+            console.log(`Forced native bridge resync for ${modelId}`);
+          }, 500);
+        }
+      } catch (error) {
+        console.error("Failed to reattach background download tasks:", error);
+      }
+    };
+
+    reattachTasks();
+  }, [attachTaskListeners]);
+
+  const startDownload = async (model: HuggingFaceModel) => {
+    const modelDownloadUrl = await getDownloadUrlForModel(model.id);
+    if (!modelDownloadUrl) {
+      console.error(`Download failed for model: ${model.id}`);
+      return null;
+    }
+
+    const fileUri = FileSystem.documentDirectory + modelDownloadUrl.filename;
+
+    await saveDownloadedModel({
+      ...model,
+      downloadInfo: {
+        ...(model.downloadInfo ?? {}),
+        localFilePath: fileUri,
+        status: "pending",
+        downloadedAt: undefined,
+      },
+    });
+
+    // Check if the specific file exists
+    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    if (fileInfo.exists) {
+      console.log("Model already exists at:", fileUri);
+      setDownloadProgress((prev) => ({ ...prev, [model.id]: 100 }));
+      await saveDownloadedModel({
+        ...model,
+        downloadInfo: {
+          ...(model.downloadInfo ?? {}),
+          status: "completed",
+          downloadedAt: Date.now(),
+          localFilePath: fileUri,
+        },
+      });
+      return fileUri;
+    }
+
+    if (activeTasksRef.current[model.id]) {
+      console.log(`Download task already running for ${model.id}`);
+      return null;
+    }
+
+    setActiveDownloads((prev) => ({ ...prev, [model.id]: true }));
+
+    // 1. Create a clean base task instance
+    const task = createDownloadTask({
+      id: model.id,
+      url: modelDownloadUrl.url,
+      destination: fileUri,
+      metadata: { fileUri: fileUri },
+    });
+
+    // 2. Map inside our tracking ref instantly
+    activeTasksRef.current[model.id] = task;
+
+    // 3. Attach standard, non-chained progress handlers securely (pass fileUri so completion can persist)
+    attachTaskListeners(task, model.id, model.name ?? model.id);
+
+    // 4. Finally execute the stream download
+    task.start();
+  };
+
+  const pauseDownload = (modelId: string) => {
+    const task = activeTasksRef.current[modelId];
+    if (task) {
+      task.pause();
+      console.log(`Paused download for: ${modelId}`);
+    }
+  };
+
+  const resumeDownload = (modelId: string) => {
+    const task = activeTasksRef.current[modelId];
+    if (task) {
+      task.resume();
+      console.log(`Resumed download for: ${modelId}`);
+    }
+  };
+
+  const cancelDownload = (modelId: string) => {
+    const task = activeTasksRef.current[modelId];
+    if (task) {
+      task.stop();
+      delete activeTasksRef.current[modelId];
+
+      setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+      setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
+      console.log(`Canceled download for: ${modelId}`);
+    }
+  };
+
+  const retreiveCompletedDownloads = async () => {
+    /**
+     * This function retrieves the list of downloads that were completed
+     *  in the background while the application was closed.
+     * It checks all pending downloads and sets their status to completed.
+     */
+
+    const modelsFromLocalStorage = await getDownloadedModelsList();
+
+    for await (const model of modelsFromLocalStorage) {
+      if (model.downloadInfo?.status === "pending") {
+        const isModelExist = await isFileAlreadyExistInLocalStorage(
+          model.downloadInfo?.localFilePath,
+        );
+
+        if (isModelExist) {
+          await saveDownloadedModel({
             ...model,
             downloadInfo: {
-                ...(model.downloadInfo ?? {}),
-                localFilePath: fileUri,
-                status: "pending",
-                downloadedAt: undefined,
+              ...(model.downloadInfo ?? {}),
+              status: "completed",
+              downloadedAt: Date.now(),
             },
-        });
-
-        // Check if the specific file exists
-        const fileInfo = await FileSystem.getInfoAsync(fileUri);
-        if (fileInfo.exists) {
-            console.log("Model already exists at:", fileUri);
-            setDownloadProgress((prev) => ({ ...prev, [model.id]: 100 }));
-            await saveDownloadedModel({
-                ...model,
-                downloadInfo: {
-                    ...(model.downloadInfo ?? {}),
-                    status: "completed",
-                    downloadedAt: Date.now(),
-                    localFilePath: fileUri,
-                },
-            });
-            return fileUri;
+          });
+          console.log(`Pending Download Model ${model.name}`);
         }
+      }
+    }
+  };
 
-        if (activeTasksRef.current[model.id]) {
-            console.log(`Download task already running for ${model.id}`);
-            return null;
-        }
+  const isFileAlreadyExistInLocalStorage = async (
+    fileUri: string | undefined,
+  ): Promise<boolean> => {
+    if (!fileUri) return false;
+    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    return fileInfo.exists;
+  };
 
-        setActiveDownloads((prev) => ({ ...prev, [model.id]: true }));
-
-        // 1. Create a clean base task instance
-        const task = createDownloadTask({
-            id: model.id,
-            url: modelDownloadUrl.url,
-            destination: fileUri,
-            metadata: { fileUri: fileUri },
-        });
-
-        // 2. Map inside our tracking ref instantly
-        activeTasksRef.current[model.id] = task;
-
-        // 3. Attach standard, non-chained progress handlers securely (pass fileUri so completion can persist)
-        attachTaskListeners(task, model.id, model.name ?? model.id);
-
-        // 4. Finally execute the stream download
-        task.start();
-    };
-
-    const pauseDownload = (modelId: string) => {
-        const task = activeTasksRef.current[modelId];
-        if (task) {
-            task.pause();
-            console.log(`Paused download for: ${modelId}`);
-        }
-    };
-
-    const resumeDownload = (modelId: string) => {
-        const task = activeTasksRef.current[modelId];
-        if (task) {
-            task.resume();
-            console.log(`Resumed download for: ${modelId}`);
-        }
-    };
-
-    const cancelDownload = (modelId: string) => {
-        const task = activeTasksRef.current[modelId];
-        if (task) {
-            task.stop();
-            delete activeTasksRef.current[modelId];
-
-            setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
-            setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
-            console.log(`Canceled download for: ${modelId}`);
-        }
-    };
-
-    const retreiveCompletedDownloads = async () => {
-        /**
-         * This function retrieves the list of downloads that were completed
-         *  in the background while the application was closed.
-         * It checks all pending downloads and sets their status to completed.
-         */
-
-        const modelsFromLocalStorage = await getDownloadedModelsList();
-
-        for await (const model of modelsFromLocalStorage) {
-            if (model.downloadInfo?.status === "pending") {
-                const isModelExist = await isFileAlreadyExistInLocalStorage(model.downloadInfo?.localFilePath);
-
-                if (isModelExist) {
-                    await saveDownloadedModel({
-                        ...model,
-                        downloadInfo: {
-                            ...(model.downloadInfo ?? {}),
-                            status: "completed",
-                            downloadedAt: Date.now(),
-                        },
-                    });
-                    console.log(`Pending Download Model ${model.name}`);
-                }
-            }
-        }
-    };
-
-    const isFileAlreadyExistInLocalStorage = async (fileUri: string | undefined): Promise<boolean> => {
-        if (!fileUri) return false;
-        const fileInfo = await FileSystem.getInfoAsync(fileUri);
-        return fileInfo.exists;
-    };
-
-    return {
-        startDownload,
-        pauseDownload,
-        resumeDownload,
-        cancelDownload,
-        downloadProgress,
-        activeDownloads,
-        retreiveCompletedDownloads,
-    };
+  return {
+    startDownload,
+    pauseDownload,
+    resumeDownload,
+    cancelDownload,
+    downloadProgress,
+    activeDownloads,
+    retreiveCompletedDownloads,
+  };
 };

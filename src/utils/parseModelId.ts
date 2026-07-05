@@ -1,7 +1,7 @@
 export function parseModelId(id: string): { author: string; name: string } {
-  const slashIndex = id.indexOf('/');
+  const slashIndex = id.indexOf("/");
   if (slashIndex === -1) {
-    return { author: 'unknown', name: id };
+    return { author: "unknown", name: id };
   }
 
   return {

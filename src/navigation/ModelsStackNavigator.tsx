@@ -1,8 +1,7 @@
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-
-import ModelsScreen from '../screens/models/ModelsScreen';
-import { colors } from '../constants/theme';
-import type { ModelsStackParamList } from './types';
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { colors } from "../constants/theme";
+import ModelsScreen from "../screens/models/ModelsScreen";
+import type { ModelsStackParamList } from "./types";
 
 const Stack = createNativeStackNavigator<ModelsStackParamList>();
 
@@ -19,7 +18,7 @@ export default function ModelsStackNavigator() {
       <Stack.Screen
         name="Models"
         component={ModelsScreen}
-        options={{ title: 'Models' }}
+        options={{ title: "Models" }}
       />
     </Stack.Navigator>
   );

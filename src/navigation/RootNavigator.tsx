@@ -1,8 +1,8 @@
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-import InitialScreen from '../screens/InitialScreen';
-import type { RootStackParamList } from './types';
-import MainTabNavigator from './MainTabNavigator';
+import InitialScreen from "../screens/InitialScreen";
+import MainTabNavigator from "./MainTabNavigator";
+import type { RootStackParamList } from "./types";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 

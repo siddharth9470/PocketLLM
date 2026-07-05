@@ -1,11 +1,11 @@
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from "@expo/vector-icons";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 
-import { colors } from '../constants/theme';
-import type { MainTabParamList } from './types';
-import ChatsStackNavigator from './ChatsStackNavigator';
-import ModelsStackNavigator from './ModelsStackNavigator';
-import SettingsStackNavigator from './SettingsStackNavigator';
+import { colors } from "../constants/theme";
+import ChatsStackNavigator from "./ChatsStackNavigator";
+import ModelsStackNavigator from "./ModelsStackNavigator";
+import SettingsStackNavigator from "./SettingsStackNavigator";
+import type { MainTabParamList } from "./types";
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -29,17 +29,17 @@ export default function MainTabNavigator() {
       <Tab.Screen
         name="ModelsTab"
         component={ModelsStackNavigator}
-        options={{ title: 'Models' }}
+        options={{ title: "Models" }}
       />
       <Tab.Screen
         name="ChatsTab"
         component={ChatsStackNavigator}
-        options={{ title: 'Chats' }}
+        options={{ title: "Chats" }}
       />
       <Tab.Screen
         name="SettingsTab"
         component={SettingsStackNavigator}
-        options={{ title: 'Settings' }}
+        options={{ title: "Settings" }}
       />
     </Tab.Navigator>
   );
@@ -49,13 +49,13 @@ function getTabIcon(
   routeName: keyof MainTabParamList,
 ): keyof typeof Ionicons.glyphMap {
   switch (routeName) {
-    case 'ModelsTab':
-      return 'cube-outline';
-    case 'ChatsTab':
-      return 'chatbubbles-outline';
-    case 'SettingsTab':
-      return 'settings-outline';
+    case "ModelsTab":
+      return "cube-outline";
+    case "ChatsTab":
+      return "chatbubbles-outline";
+    case "SettingsTab":
+      return "settings-outline";
     default:
-      return 'ellipse-outline';
+      return "ellipse-outline";
   }
 }

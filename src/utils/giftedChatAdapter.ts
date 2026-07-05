@@ -13,12 +13,10 @@ export const CHAT_ASSISTANT: User = {
 };
 
 export function toGiftedChatMessages(messages: ChatMessage[]): IMessage[] {
-  return [...messages]
-    .reverse()
-    .map((message) => ({
-      _id: message.id,
-      text: message.content,
-      createdAt: new Date(message.createdAt),
-      user: message.role === "user" ? CHAT_USER : CHAT_ASSISTANT,
-    }));
+  return [...messages].reverse().map((message) => ({
+    _id: message.id,
+    text: message.content,
+    createdAt: new Date(message.createdAt),
+    user: message.role === "user" ? CHAT_USER : CHAT_ASSISTANT,
+  }));
 }

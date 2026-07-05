@@ -1,24 +1,32 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from "react-native";
 
-import { colors, spacing, typography } from '../../constants/theme';
-import type { SettingsStackScreenProps } from '../../navigation/types';
+import { colors, spacing, typography } from "../../constants/theme";
+import type { SettingsStackScreenProps } from "../../navigation/types";
 
-export default function SettingsScreen(_props: SettingsStackScreenProps<'Settings'>) {
+export default function SettingsScreen(
+  _props: SettingsStackScreenProps<"Settings">,
+) {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
         <Text style={styles.title}>PocketLLM</Text>
-        <Text style={styles.subtitle}>Local on-device inference (coming soon)</Text>
+        <Text style={styles.subtitle}>
+          Local on-device inference (coming soon)
+        </Text>
       </View>
 
       <View style={styles.card}>
         <Text style={styles.rowLabel}>Storage</Text>
-        <Text style={styles.rowValue}>Models save to the document directory</Text>
+        <Text style={styles.rowValue}>
+          Models save to the document directory
+        </Text>
       </View>
 
       <View style={styles.card}>
         <Text style={styles.rowLabel}>Inference</Text>
-        <Text style={styles.rowValue}>llama.rn integration is not wired yet</Text>
+        <Text style={styles.rowValue}>
+          llama.rn integration is not wired yet
+        </Text>
       </View>
     </View>
   );
