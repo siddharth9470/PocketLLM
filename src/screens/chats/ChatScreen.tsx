@@ -1,119 +1,137 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
-import { GiftedChat } from "react-native-gifted-chat";
-import ChatBubble from "../../components/ChatBubble";
+import { useCallback, useMemo, type ComponentProps } from "react";
+import { StyleSheet, View } from "react-native";
+import { Bubble, GiftedChat, type IMessage } from "react-native-gifted-chat";
+
 import ModelPicker from "../../components/ModelPicker";
-import { colors, radii, spacing } from "../../constants/theme";
+import { colors, radii, spacing, typography } from "../../constants/theme";
 import type { ChatsStackScreenProps } from "../../navigation/types";
 import { useChatStore } from "../../stores/chatStore";
-import { HuggingFaceModel } from "../../types/models";
+import type { HuggingFaceModel } from "../../types/models";
+import {
+  CHAT_USER,
+  toGiftedChatMessages,
+} from "../../utils/giftedChatAdapter";
 
-export default function ChatScreen({ navigation, route }: ChatsStackScreenProps<"Chat">) {
-    const { conversationId } = route.params;
-    const conversation = useChatStore((state) => state.getConversation(conversationId));
-    const sendMessage = useChatStore((state) => state.sendMessage);
-    const setConversationModel = useChatStore((state) => state.setConversationModel);
+export default function ChatScreen({
+  route,
+}: ChatsStackScreenProps<"Chat">) {
+  const { conversationId } = route.params;
+  const conversation = useChatStore((state) =>
+    state.getConversation(conversationId),
+  );
+  const sendMessage = useChatStore((state) => state.sendMessage);
+  const setConversationModel = useChatStore(
+    (state) => state.setConversationModel,
+  );
 
-    const [draft, setDraft] = useState("");
-    const listRef = useRef<FlatList>(null);
+  const headerHeight = useHeaderHeight();
 
-    //const messages = conversation?.messages ?? [];
+  const giftedMessages = useMemo(
+    () => toGiftedChatMessages(conversation?.messages ?? []),
+    [conversation?.messages],
+  );
 
-    const [selectedModel, setSelectedModel] = useState<HuggingFaceModel | undefined>();
+  const handleSend = useCallback(
+    (messages: IMessage[] = []) => {
+      const text = messages[0]?.text.trim();
+      if (!text) {
+        return;
+      }
 
-    const [messages, setMessages] = useState<any>([]);
+      sendMessage(conversationId, text);
+    },
+    [conversationId, sendMessage],
+  );
 
-    const handleSend = () => {
-        if (!draft.trim()) {
-            return;
-        }
+  const handleSelectModel = useCallback(
+    (model: HuggingFaceModel) => {
+      setConversationModel(conversationId, model.id);
+    },
+    [conversationId, setConversationModel],
+  );
 
-        sendMessage(conversationId, draft);
-        setDraft("");
-        requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
-    };
+  const renderBubble = useCallback(
+    (props: ComponentProps<typeof Bubble>) => (
+      <Bubble
+        {...props}
+        wrapperStyle={{
+          left: styles.assistantBubble,
+          right: styles.userBubble,
+        }}
+        textStyle={{
+          left: styles.assistantText,
+          right: styles.userText,
+        }}
+      />
+    ),
+    [],
+  );
 
-    useEffect(() => {
-        setMessages([
-            {
-                _id: 1,
-                text: "Hello developer",
-                createdAt: new Date(),
-                user: {
-                    _id: 2,
-                    name: "John Doe",
-                    avatar: "https://placeimg.com/140/140/any",
-                },
-            },
-        ]);
-    }, []);
+  return (
+    <View style={styles.container}>
+      <View style={styles.modelPickerRow}>
+        <ModelPicker onSelectModel={handleSelectModel} />
+      </View>
 
-    const onSend = useCallback((messages = []) => {
-        setMessages((previousMessages: any) => GiftedChat.append(previousMessages, messages));
-    }, []);
-
-    const headerHeight = useHeaderHeight();
-
-    return (
-        <KeyboardAvoidingView
-            style={styles.container}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            keyboardVerticalOffset={150}
-        >
-            <ModelPicker onSelectModel={(model) => setSelectedModel(model)} />
-
-            <GiftedChat
-                messages={messages}
-                onSend={(messages: any) => onSend(messages)}
-                user={{
-                    _id: 1,
-                }}
-            />
-        </KeyboardAvoidingView>
-    );
+      <GiftedChat
+        messages={giftedMessages}
+        onSend={handleSend}
+        user={CHAT_USER}
+        renderBubble={renderBubble}
+        renderAvatar={() => null}
+        isUserAvatarVisible={false}
+        messagesContainerStyle={styles.messagesContainer}
+        textInputProps={{
+          style: styles.composerInput,
+          placeholder: "Message...",
+          placeholderTextColor: colors.textSecondary,
+        }}
+        keyboardAvoidingViewProps={{
+          keyboardVerticalOffset: headerHeight,
+        }}
+      />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: colors.background,
-    },
-    messagesContent: {
-        paddingVertical: spacing.lg,
-        flexGrow: 1,
-    },
-    composer: {
-        flexDirection: "row",
-        alignItems: "flex-end",
-        gap: spacing.sm,
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.md,
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: colors.border,
-        backgroundColor: colors.surface,
-    },
-    input: {
-        flex: 1,
-        minHeight: 40,
-        maxHeight: 120,
-        backgroundColor: colors.chipBackground,
-        borderRadius: radii.lg,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
-        fontSize: 16,
-        color: colors.text,
-    },
-    sendButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: colors.primary,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    sendButtonDisabled: {
-        opacity: 0.4,
-    },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  modelPickerRow: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+    alignItems: "flex-end",
+  },
+  messagesContainer: {
+    backgroundColor: colors.background,
+  },
+  composerInput: {
+    ...typography.body,
+    color: colors.text,
+    backgroundColor: colors.chipBackground,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.md,
+    marginHorizontal: spacing.sm,
+    lineHeight: 22,
+  },
+  userBubble: {
+    backgroundColor: colors.userBubble,
+    borderBottomRightRadius: radii.sm,
+  },
+  assistantBubble: {
+    backgroundColor: colors.assistantBubble,
+    borderBottomLeftRadius: radii.sm,
+  },
+  userText: {
+    ...typography.body,
+    color: colors.userBubbleText,
+  },
+  assistantText: {
+    ...typography.body,
+    color: colors.assistantText,
+  },
 });
