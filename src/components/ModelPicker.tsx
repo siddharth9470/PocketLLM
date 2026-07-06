@@ -3,7 +3,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useState } from "react";
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, radii, spacing, typography } from "../constants/theme";
-import { getDownloadedModelsList } from "../storage/modelStorage";
+import { getDownloadedModelsList } from "../db/ModelDB";
 import type { HuggingFaceModel } from "../types/models";
 import { parseModelId } from "../utils/parseModelId";
 

@@ -1,6 +1,7 @@
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { chatDb } from "./ChatDB";
+import { modelDb } from "./ModelDB";
 
 const VAULT_KEY_NAME = "pocketllm_secure_aes_key";
 
@@ -10,7 +11,7 @@ export const initializeAllDatabases = async (): Promise<void> => {
 
     const hardwareKey = await getCryptoHardwareKey();
 
-    await Promise.all([chatDb.initialize(hardwareKey)]);
+    await Promise.all([chatDb.initialize(hardwareKey), modelDb.initialize(hardwareKey)]);
 
     console.log("🚀 All databases initialized and unlocked successfully!");
   } catch (error) {

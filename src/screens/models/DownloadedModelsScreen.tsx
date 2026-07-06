@@ -2,7 +2,10 @@ import { useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { getDownloadedModelsList, removeDownloadedModel } from "../../storage/modelStorage";
+import {
+  getDownloadedModelsList,
+  removeDownloadedModel,
+} from "../../db/ModelDB";
 import type { HuggingFaceModel } from "../../types/models";
 
 export default function DownloadedModelsScreen() {
