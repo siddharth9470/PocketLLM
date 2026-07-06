@@ -3,7 +3,8 @@ import {
   createDownloadTask,
   getExistingDownloadTasks,
 } from "@kesha-antonov/react-native-background-downloader";
-import type { DownloadTask } from "@kesha-antonov/react-native-background-downloader/src/DownloadTask";
+
+type DownloadTask = ReturnType<typeof createDownloadTask>;
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getDownloadedModels, getDownloadedModelsList, saveDownloadedModel } from "../storage/modelStorage";
@@ -90,7 +91,9 @@ export const useModelDownloader = () => {
           activeTasksRef.current[modelId] = nativeTask;
           setActiveDownloads((prev) => ({ ...prev, [modelId]: true }));
 
-          // Re-bind direct event assignments (no fileUri available during reattach)
+          setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
+
+          // Re-bind direct event assignments
           attachTaskListeners(nativeTask, modelId);
 
           // THE CPR FIX: Force the Native OS to resync with the new JS Bridge
