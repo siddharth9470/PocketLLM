@@ -17,14 +17,22 @@ import {
   createMessage,
   getConversationById,
   getConversations,
+  getMessagesByConversationId,
   updateConversation,
 } from "../db/ChatDB";
-import { getMockAssistantResponse } from "../services/mockChatResponse";
+import {
+  buildChatContextFromHistory,
+  classifyInferenceError,
+  resolveDownloadedModelPath,
+  runInference,
+} from "../services/chatHelper";
 import type { ChatMessage, Conversation } from "../types/chat";
 import { deriveConversationTitle, generateChatId } from "../utils/chatIds";
+import { buildConversationPreview } from "../utils/conversationPreview";
 
 interface SendMessageOptions {
-  modelId?: string;
+  modelId: string;
+  onInferenceError?: (message: string) => void;
 }
 
 interface ChatStore {
@@ -38,7 +46,7 @@ interface ChatStore {
   createConversationId: () => string;
   setActiveConversationId: (conversationId: string | null) => void;
   setConversationModel: (conversationId: string, modelId: string) => Promise<void>;
-  sendMessage: (conversationId: string, content: string, options?: SendMessageOptions) => Promise<void>;
+  sendMessage: (conversationId: string, content: string, options: SendMessageOptions) => Promise<void>;
 }
 
 const ChatStoreContext = createContext<ChatStore | undefined>(undefined);
@@ -215,9 +223,15 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
   );
 
   const sendMessage = useCallback(
-    async (conversationId: string, content: string, options?: SendMessageOptions) => {
+    async (conversationId: string, content: string, options: SendMessageOptions) => {
       const trimmed = content.trim();
       if (!trimmed) {
+        return;
+      }
+
+      const modelPath = await resolveDownloadedModelPath(options.modelId);
+      if (!modelPath) {
+        options.onInferenceError?.(ChatScreenLabels.MODEL_UNAVAILABLE);
         return;
       }
 
@@ -233,14 +247,14 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
             id: conversationId,
             title,
             preview: trimmed,
-            modelId: options?.modelId ?? "",
+            modelId: options.modelId,
             createdAt: now,
             updatedAt: now,
             messages: [],
           };
 
           await createConversation(newConversation);
-        } else if (options?.modelId) {
+        } else {
           await updateConversation(conversationId, {
             modelId: options.modelId,
             updatedAt: now,
@@ -262,6 +276,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
               ...prev,
               [conversationId]: {
                 ...current,
+                modelId: options.modelId,
                 preview: trimmed,
                 updatedAt: now,
                 messages: [...(current.messages ?? []), userMessage],
@@ -270,15 +285,40 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        const assistantContent = await getMockAssistantResponse();
+        const history = await getMessagesByConversationId(conversationId);
+        const contextMessages = buildChatContextFromHistory(history);
 
-        const assistantMessage = buildAssistantMessage(conversationId, assistantContent, "completed");
+        let assistantContent: string = ChatScreenLabels.INFERENCE_FAILED;
+        let assistantStatus: ChatMessage["status"] = "completed";
+        let assistantError: string | undefined;
+        let assistantMetrics: ChatMessage["metrics"] | undefined;
+
+        try {
+          const completion = await runInference(modelPath, contextMessages);
+          assistantContent = completion.text.trim() || ChatScreenLabels.INFERENCE_FAILED;
+          assistantMetrics = completion.metrics;
+        } catch (error) {
+          const classified = classifyInferenceError(error);
+          assistantStatus = "error";
+          assistantError = classified.logMessage;
+          assistantContent = classified.userMessage;
+          console.error("Assistant inference failed:", error);
+          options.onInferenceError?.(classified.userMessage);
+        }
+
+        const assistantMessage = buildAssistantMessage(
+          conversationId,
+          assistantContent,
+          assistantStatus,
+          assistantMetrics,
+          assistantError,
+        );
 
         await createMessage(assistantMessage);
 
         const responseTimestamp = new Date().toISOString();
         await updateConversation(conversationId, {
-          preview: assistantContent,
+          preview: buildConversationPreview(assistantContent),
           updatedAt: responseTimestamp,
         });
 
@@ -286,6 +326,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         await refreshConversations();
       } catch (error) {
         console.error("Failed to send message:", error);
+        options.onInferenceError?.(ChatScreenLabels.INFERENCE_FAILED);
       } finally {
         setIsSending(false);
       }

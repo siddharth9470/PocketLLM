@@ -1,17 +1,29 @@
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Keyboard, StyleSheet, View } from "react-native";
-import { Bubble, GiftedChat, type IMessage } from "react-native-gifted-chat";
+import { ActivityIndicator, Alert, Keyboard, Pressable, StyleSheet, Text, View } from "react-native";
+import { Bubble, GiftedChat, type IMessage, Send } from "react-native-gifted-chat";
 
 import ModelPicker from "../../components/ModelPicker";
 import { ChatScreenLabels } from "../../constants/chat";
 import { colors, radii, spacing, typography } from "../../constants/theme";
+import { getDownloadedModelsList } from "../../db/ModelDB";
 import type { ChatsStackScreenProps } from "../../navigation/types";
+import { classifyInferenceError, initializeModel, resolveDownloadedModelPath, releaseModel } from "../../services/chatHelper";
 import { useChatStore } from "../../stores/chatStore";
 import type { HuggingFaceModel } from "../../types/models";
 import { generateChatId } from "../../utils/chatIds";
+import { isLanguageModelGgufFilename } from "../../utils/ggufFileSelection";
 import { CHAT_USER, toGiftedChatMessages } from "../../utils/giftedChatAdapter";
+
+function isDownloadReadyModel(model: HuggingFaceModel): boolean {
+  const localFilePath = model.downloadInfo?.localFilePath;
+  return (
+    model.downloadInfo?.status === "completed" &&
+    Boolean(localFilePath) &&
+    isLanguageModelGgufFilename(localFilePath ?? "")
+  );
+}
 
 export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<"Chat">) {
   const { conversationId } = route.params;
@@ -26,6 +38,8 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   const [selectedModelId, setSelectedModelId] = useState<string | undefined>(conversation?.modelId);
   const [isInitialLoad, setIsInitialLoad] = useState(() => conversation === undefined);
   const [isChatUiMounted, setIsChatUiMounted] = useState(false);
+  const [isModelPickerVisible, setIsModelPickerVisible] = useState(false);
+  const [readyModelIds, setReadyModelIds] = useState<Set<string>>(new Set());
 
   const isMountedRef = useRef(true);
 
@@ -39,12 +53,28 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
   const headerHeight = useHeaderHeight();
 
+  const refreshReadyModels = useCallback(async () => {
+    try {
+      const models = await getDownloadedModelsList();
+      setReadyModelIds(new Set(models.filter(isDownloadReadyModel).map((model) => model.id)));
+    } catch (error) {
+      console.error("Failed to load downloaded models for chat:", error);
+    }
+  }, []);
+
+  const isModelReady = Boolean(selectedModelId && readyModelIds.has(selectedModelId));
+
+  const showInferenceError = useCallback((message: string) => {
+    Alert.alert(ChatScreenLabels.INFERENCE_ERROR_TITLE, message);
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       let isCancelled = false;
 
       setActiveConversationId(conversationId);
       setIsChatUiMounted(true);
+      void refreshReadyModels();
 
       void loadConversation(conversationId).finally(() => {
         if (!isCancelled && isMountedRef.current) {
@@ -57,8 +87,10 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         setActiveConversationId(null);
         Keyboard.dismiss();
         setIsChatUiMounted(false);
+        setIsModelPickerVisible(false);
+        void releaseModel();
       };
-    }, [conversationId, loadConversation, setActiveConversationId]),
+    }, [conversationId, loadConversation, refreshReadyModels, setActiveConversationId]),
   );
 
   useEffect(() => {
@@ -79,6 +111,14 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   }, [conversation?.modelId, isChatUiMounted]);
 
   useEffect(() => {
+    if (!isChatUiMounted || isModelReady) {
+      return;
+    }
+
+    setIsModelPickerVisible(true);
+  }, [isChatUiMounted, isModelReady]);
+
+  useEffect(() => {
     if (!isChatUiMounted || !conversation?.title) {
       return;
     }
@@ -93,7 +133,10 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
   const handleSend = useCallback(
     (messages: IMessage[] = []) => {
-      if (isSending) {
+      if (isSending || !isModelReady || !selectedModelId) {
+        if (!isModelReady) {
+          setIsModelPickerVisible(true);
+        }
         return;
       }
 
@@ -104,17 +147,44 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
       void sendMessage(conversationId, text, {
         modelId: selectedModelId,
+        onInferenceError: showInferenceError,
       });
     },
-    [conversationId, isSending, selectedModelId, sendMessage],
+    [conversationId, isModelReady, isSending, selectedModelId, sendMessage, showInferenceError],
   );
 
   const handleSelectModel = useCallback(
-    (model: HuggingFaceModel) => {
+    async (model: HuggingFaceModel) => {
+      const modelPath = await resolveDownloadedModelPath(model.id);
+      if (!modelPath) {
+        showInferenceError(ChatScreenLabels.MODEL_UNAVAILABLE);
+        return;
+      }
+
+      try {
+        await initializeModel(modelPath);
+      } catch (error) {
+        showInferenceError(classifyInferenceError(error).userMessage);
+        return;
+      }
+
       setSelectedModelId(model.id);
+      setReadyModelIds((prev) => new Set(prev).add(model.id));
+      setIsModelPickerVisible(false);
       void setConversationModel(conversationId, model.id);
     },
-    [conversationId, setConversationModel],
+    [conversationId, setConversationModel, showInferenceError],
+  );
+
+  const renderSend = useCallback(
+    (props: ComponentProps<typeof Send>) => {
+      if (!isModelReady) {
+        return null;
+      }
+
+      return <Send {...props} />;
+    },
+    [isModelReady],
   );
 
   const renderBubble = useCallback(
@@ -144,8 +214,20 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
   return (
     <View style={styles.container}>
+      {!isModelReady ? (
+        <Pressable style={styles.modelPromptBanner} onPress={() => setIsModelPickerVisible(true)}>
+          <Text style={styles.modelPromptText}>{ChatScreenLabels.MODEL_SELECT_PROMPT}</Text>
+        </Pressable>
+      ) : null}
+
       <View style={styles.modelPickerRow}>
-        <ModelPicker onSelectModel={handleSelectModel} />
+        <ModelPicker
+          selectedModelId={selectedModelId}
+          visible={isModelPickerVisible}
+          onOpenRequest={() => setIsModelPickerVisible(true)}
+          onClose={() => setIsModelPickerVisible(false)}
+          onSelectModel={handleSelectModel}
+        />
       </View>
 
       <View style={styles.chatContainer}>
@@ -157,13 +239,17 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
             user={CHAT_USER}
             messageIdGenerator={generateChatId}
             renderBubble={renderBubble}
+            renderSend={renderSend}
             renderAvatar={() => null}
             isUserAvatarVisible={false}
             isTyping={isSending}
             messagesContainerStyle={styles.messagesContainer}
             textInputProps={{
               style: styles.composerInput,
-              placeholder: ChatScreenLabels.COMPOSER_PLACEHOLDER,
+              editable: isModelReady,
+              placeholder: isModelReady
+                ? ChatScreenLabels.COMPOSER_PLACEHOLDER
+                : ChatScreenLabels.MODEL_REQUIRED,
               placeholderTextColor: colors.textSecondary,
             }}
             keyboardAvoidingViewProps={{
@@ -186,6 +272,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.background,
+  },
+  modelPromptBanner: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    backgroundColor: colors.chipBackground,
+  },
+  modelPromptText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: "center",
   },
   modelPickerRow: {
     paddingHorizontal: spacing.lg,

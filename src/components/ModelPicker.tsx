@@ -1,45 +1,94 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useIsFocused } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useState } from "react";
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { ChatScreenLabels } from "../constants/chat";
 import { colors, radii, spacing, typography } from "../constants/theme";
 import { getDownloadedModelsList } from "../db/ModelDB";
 import type { HuggingFaceModel } from "../types/models";
+import { isLanguageModelGgufFilename } from "../utils/ggufFileSelection";
 import { parseModelId } from "../utils/parseModelId";
 
 interface ModelPickerProps {
+  selectedModelId?: string;
+  visible?: boolean;
+  onOpenRequest?: () => void;
+  onClose?: () => void;
   onSelectModel: (model: HuggingFaceModel) => void;
 }
 
-export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
-  const isFocused = useIsFocused();
+function isModelReady(model: HuggingFaceModel): boolean {
+  const localFilePath = model.downloadInfo?.localFilePath;
+  return (
+    model.downloadInfo?.status === "completed" &&
+    Boolean(localFilePath) &&
+    isLanguageModelGgufFilename(localFilePath ?? "")
+  );
+}
 
-  const [visible, setVisible] = useState(false);
-
-  const [availableModel, setAvailableModel] = useState<HuggingFaceModel[]>([]);
+export default function ModelPicker({
+  selectedModelId,
+  visible,
+  onOpenRequest,
+  onClose,
+  onSelectModel,
+}: ModelPickerProps) {
+  const isControlled = visible !== undefined;
+  const [internalVisible, setInternalVisible] = useState(false);
+  const [availableModels, setAvailableModels] = useState<HuggingFaceModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<HuggingFaceModel | undefined>();
+
+  const modalVisible = isControlled ? visible : internalVisible;
 
   const load = useCallback(async () => {
     try {
       const modelsFromLocalStorage = await getDownloadedModelsList();
-
-      setAvailableModel(modelsFromLocalStorage);
+      setAvailableModels(modelsFromLocalStorage.filter(isModelReady));
     } catch (err) {
       console.error("Failed to load downloaded models", err);
     }
   }, []);
 
   useEffect(() => {
-    if (isFocused) load();
-  }, [isFocused, load]);
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!selectedModelId) {
+      setSelectedModel(undefined);
+      return;
+    }
+
+    const matched = availableModels.find((model) => model.id === selectedModelId);
+    if (matched) {
+      setSelectedModel(matched);
+    }
+  }, [availableModels, selectedModelId]);
+
+  const closeModal = useCallback(() => {
+    if (isControlled) {
+      onClose?.();
+      return;
+    }
+
+    setInternalVisible(false);
+  }, [isControlled, onClose]);
+
+  const openModal = useCallback(() => {
+    if (isControlled) {
+      onOpenRequest?.();
+      return;
+    }
+
+    setInternalVisible(true);
+  }, [isControlled, onOpenRequest]);
 
   const handleSelect = useCallback(
     (item: HuggingFaceModel) => {
       setSelectedModel(item);
       onSelectModel(item);
-      setVisible(false);
+      closeModal();
     },
-    [onSelectModel],
+    [closeModal, onSelectModel],
   );
 
   const renderModels = useCallback(
@@ -52,24 +101,33 @@ export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
 
   return (
     <>
-      <Pressable style={styles.trigger} onPress={() => setVisible(true)}>
+      <Pressable style={styles.trigger} onPress={openModal}>
         <Ionicons name="hardware-chip-outline" size={16} color={colors.primary} />
         <Text style={styles.triggerText} numberOfLines={1}>
-          {selectedModel ? parseModelId(selectedModel.id).name : "Select a Modal"}
+          {selectedModel ? parseModelId(selectedModel.id).name : ChatScreenLabels.MODEL_SELECT_TITLE}
         </Text>
         <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
       </Pressable>
 
-      <Modal visible={visible} transparent animationType="fade">
-        <Pressable style={styles.backdrop} onPress={() => setVisible(false)}>
-          <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>Active Model</Text>
-            {availableModel.length === 0 ? (
-              <Text style={styles.emptyText}>Download a model from the Models tab to use it in chat.</Text>
+      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={closeModal}>
+        <Pressable style={styles.backdrop} onPress={closeModal}>
+          <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.sheetTitle}>{ChatScreenLabels.MODEL_SELECT_TITLE}</Text>
+            <Text style={styles.sheetPrompt}>{ChatScreenLabels.MODEL_SELECT_PROMPT}</Text>
+            {availableModels.length === 0 ? (
+              <Text style={styles.emptyText}>
+                Download a text-generation GGUF from the Models tab. Vision projector files (mmproj) cannot
+                be used for chat.
+              </Text>
             ) : (
-              <FlatList data={availableModel} renderItem={renderModels} keyExtractor={(item) => item.id} />
+              <FlatList
+                data={availableModels}
+                renderItem={renderModels}
+                keyExtractor={(item) => item.id}
+                keyboardShouldPersistTaps="handled"
+              />
             )}
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
     </>
@@ -94,7 +152,7 @@ const ModelListItem = memo(
           <Text style={styles.optionName}>{name}</Text>
           <Text style={styles.optionAuthor}>{author}</Text>
         </View>
-        {isSelected && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+        {isSelected ? <Ionicons name="checkmark-circle" size={20} color={colors.primary} /> : null}
       </Pressable>
     );
   },
@@ -133,6 +191,11 @@ const styles = StyleSheet.create({
   sheetTitle: {
     ...typography.headline,
     color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  sheetPrompt: {
+    ...typography.body,
+    color: colors.textSecondary,
     marginBottom: spacing.md,
   },
   emptyText: {
