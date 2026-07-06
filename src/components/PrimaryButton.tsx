@@ -1,11 +1,4 @@
-import {
-  ActivityIndicator,
-  Pressable,
-  type StyleProp,
-  StyleSheet,
-  Text,
-  type ViewStyle,
-} from "react-native";
+import { ActivityIndicator, Pressable, type StyleProp, StyleSheet, Text, type ViewStyle } from "react-native";
 
 import { colors, radii, spacing, typography } from "../constants/theme";
 
@@ -41,18 +34,9 @@ export default function PrimaryButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator
-          color={variant === "secondary" ? colors.primary : colors.surface}
-        />
+        <ActivityIndicator color={variant === "secondary" ? colors.primary : colors.surface} />
       ) : (
-        <Text
-          style={[
-            styles.label,
-            variant === "secondary" && styles.secondaryLabel,
-          ]}
-        >
-          {label}
-        </Text>
+        <Text style={[styles.label, variant === "secondary" && styles.secondaryLabel]}>{label}</Text>
       )}
     </Pressable>
   );

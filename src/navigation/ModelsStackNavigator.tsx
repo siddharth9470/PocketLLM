@@ -15,11 +15,7 @@ export default function ModelsStackNavigator() {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <Stack.Screen
-        name="Models"
-        component={ModelsScreen}
-        options={{ title: "Models" }}
-      />
+      <Stack.Screen name="Models" component={ModelsScreen} options={{ title: "Models" }} />
     </Stack.Navigator>
   );
 }

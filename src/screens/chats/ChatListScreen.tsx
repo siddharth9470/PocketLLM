@@ -5,9 +5,7 @@ import type { ChatsStackScreenProps } from "../../navigation/types";
 import { useChatStore } from "../../stores/chatStore";
 import { parseModelId } from "../../utils/parseModelId";
 
-export default function ChatListScreen({
-  navigation,
-}: ChatsStackScreenProps<"ChatList">) {
+export default function ChatListScreen({ navigation }: ChatsStackScreenProps<"ChatList">) {
   const conversations = useChatStore((state) => state.conversations);
 
   return (

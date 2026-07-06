@@ -1,13 +1,9 @@
-import { type HFModelDetails, HuggingFaceModel } from "../types/models";
+import type { HFModelDetails } from "../types/models";
 
-export const getDownloadUrlForModel = async (
-  modelId: string,
-): Promise<{ url: string; filename: string } | null> => {
+export const getDownloadUrlForModel = async (modelId: string): Promise<{ url: string; filename: string } | null> => {
   try {
     // 1. Fetch the full details for the clicked model repository
-    const response = await fetch(
-      `https://huggingface.co/api/models/${modelId}`,
-    );
+    const response = await fetch(`https://huggingface.co/api/models/${modelId}`);
 
     if (!response.ok) throw new Error("Failed to fetch model details");
 
@@ -15,17 +11,11 @@ export const getDownloadUrlForModel = async (
     let currentModelId = modelId;
 
     // 2. Extract and filter out only the .gguf files
-    let ggufFiles = data.siblings
-      ? data.siblings
-          .map((s) => s.rfilename)
-          .filter((name) => name.endsWith(".gguf"))
-      : [];
+    let ggufFiles = data.siblings ? data.siblings.map((s) => s.rfilename).filter((name) => name.endsWith(".gguf")) : [];
 
     // 🚀 FALLBACK LOGIC: If no GGUF files exist in this repo, find a GGUF clone!
     if (ggufFiles.length === 0) {
-      console.log(
-        `No GGUF files found in base repo ${modelId}. Searching for community GGUF clones...`,
-      );
+      console.log(`No GGUF files found in base repo ${modelId}. Searching for community GGUF clones...`);
 
       // Extract the base model name (e.g., "Meta-Llama-3-8B-Instruct" from "meta-llama/Meta-Llama-3-8B-Instruct")
       const baseModelName = modelId.split("/").pop();
@@ -44,19 +34,14 @@ export const getDownloadUrlForModel = async (
           console.log(`Found fallback GGUF repository: ${fallbackModelId}`);
 
           // Fetch details for the fallback community GGUF repo
-          const fallbackDetailsResponse = await fetch(
-            `https://huggingface.co/api/models/${fallbackModelId}`,
-          );
+          const fallbackDetailsResponse = await fetch(`https://huggingface.co/api/models/${fallbackModelId}`);
 
           if (fallbackDetailsResponse.ok) {
-            const fallbackData: HFModelDetails =
-              await fallbackDetailsResponse.json();
+            const fallbackData: HFModelDetails = await fallbackDetailsResponse.json();
 
             // Update our tracking variables with the fallback repository data
             ggufFiles = fallbackData.siblings
-              ? fallbackData.siblings
-                  .map((s) => s.rfilename)
-                  .filter((name) => name.endsWith(".gguf"))
+              ? fallbackData.siblings.map((s) => s.rfilename).filter((name) => name.endsWith(".gguf"))
               : [];
 
             currentModelId = fallbackModelId;
@@ -72,9 +57,7 @@ export const getDownloadUrlForModel = async (
     }
 
     // 3. Auto-select the best mobile quantization (Q4_K_M) if it exists, otherwise grab the first one
-    const targetFilename =
-      ggufFiles.find((name) => name.toLowerCase().includes("q4_k_m")) ||
-      ggufFiles[0];
+    const targetFilename = ggufFiles.find((name) => name.toLowerCase().includes("q4_k_m")) || ggufFiles[0];
 
     // 🚀 FIX HERE: Strip out any folder paths right now so the UI component never receives them!
     // This changes "prompt_enhancer/mmproj-BF16.gguf" -> "mmproj-BF16.gguf"

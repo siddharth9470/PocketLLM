@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import React from "react";
 import { colors } from "../constants/theme";
 import ChatListScreen from "../screens/chats/ChatListScreen";
 import ChatScreen from "../screens/chats/ChatScreen";
@@ -27,11 +26,7 @@ export default function CentralNavigator() {
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
       <RootStack.Screen name="Initial" component={InitialScreen} />
-      <RootStack.Screen
-        name="Main"
-        component={MainTab}
-        options={{ headerShown: false }}
-      />
+      <RootStack.Screen name="Main" component={MainTab} options={{ headerShown: false }} />
     </RootStack.Navigator>
   );
 }
@@ -55,21 +50,9 @@ function MainTab() {
         },
       })}
     >
-      <Tab.Screen
-        name="ModelsTab"
-        component={ModelsStackNavigator}
-        options={{ title: "Models" }}
-      />
-      <Tab.Screen
-        name="ChatsTab"
-        component={ChatsStackNavigator}
-        options={{ title: "Chats" }}
-      />
-      <Tab.Screen
-        name="SettingsTab"
-        component={SettingsStackNavigator}
-        options={{ title: "Settings" }}
-      />
+      <Tab.Screen name="ModelsTab" component={ModelsStackNavigator} options={{ title: "Models" }} />
+      <Tab.Screen name="ChatsTab" component={ChatsStackNavigator} options={{ title: "Chats" }} />
+      <Tab.Screen name="SettingsTab" component={SettingsStackNavigator} options={{ title: "Settings" }} />
     </Tab.Navigator>
   );
 }
@@ -84,11 +67,7 @@ function ModelsStackNavigator() {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <ModelsStack.Screen
-        name="Models"
-        component={ModelsScreen}
-        options={{ title: "Models" }}
-      />
+      <ModelsStack.Screen name="Models" component={ModelsScreen} options={{ title: "Models" }} />
       <ModelsStack.Screen
         name="DownloadedModels"
         component={DownloadedModelsScreen}
@@ -108,11 +87,7 @@ function ChatsStackNavigator() {
       }}
     >
       <ChatsStack.Screen name="ChatList" component={ChatListScreen} />
-      <ChatsStack.Screen
-        name="Chat"
-        component={ChatScreen}
-        options={({ route }) => ({ title: route.params.title })}
-      />
+      <ChatsStack.Screen name="Chat" component={ChatScreen} options={({ route }) => ({ title: route.params.title })} />
     </ChatsStack.Navigator>
   );
 }
@@ -127,18 +102,12 @@ function SettingsStackNavigator() {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <SettingsStack.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{ title: "Settings" }}
-      />
+      <SettingsStack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
     </SettingsStack.Navigator>
   );
 }
 
-function getTabIcon(
-  routeName: keyof MainTabParamList,
-): keyof typeof Ionicons.glyphMap {
+function getTabIcon(routeName: keyof MainTabParamList): keyof typeof Ionicons.glyphMap {
   switch (routeName) {
     case "ModelsTab":
       return "cube-outline";

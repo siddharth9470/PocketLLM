@@ -6,97 +6,68 @@ import {
 import type { DownloadTask } from "@kesha-antonov/react-native-background-downloader/src/DownloadTask";
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  getDownloadedModels,
-  getDownloadedModelsList,
-  saveDownloadedModel,
-} from "../storage/modelStorage";
+import { getDownloadedModels, getDownloadedModelsList, saveDownloadedModel } from "../storage/modelStorage";
 import type { HuggingFaceModel } from "../types/models";
 import { getDownloadUrlForModel } from "./downloadHelpers";
 
 export const useModelDownloader = () => {
-  const [downloadProgress, setDownloadProgress] = useState<
-    Record<string, number>
-  >({});
-  const [activeDownloads, setActiveDownloads] = useState<
-    Record<string, boolean>
-  >({});
+  const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
+  const [activeDownloads, setActiveDownloads] = useState<Record<string, boolean>>({});
 
   // The logbook that holds active native task objects in memory
   const activeTasksRef = useRef<Record<string, DownloadTask>>({});
 
   // Fixed parameter to be a single destructured object to match ProgressHandler type signature
-  const attachTaskListeners = useCallback(
-    (task: DownloadTask, modelId: string, modelName?: string) => {
-      task.progress(
-        ({
-          bytesDownloaded,
-          bytesTotal,
-        }: {
-          bytesDownloaded: number;
-          bytesTotal: number;
-        }) => {
-          const percentage = (bytesDownloaded / bytesTotal) * 100;
-          console.log(
-            `Download percentage for ${modelId}: ${percentage.toFixed(2)}%`,
-          );
-          setDownloadProgress((prev) => ({
-            ...prev,
-            [modelId]: percentage,
-          }));
-        },
-      );
+  const attachTaskListeners = useCallback((task: DownloadTask, modelId: string, _modelName?: string) => {
+    task.progress(({ bytesDownloaded, bytesTotal }: { bytesDownloaded: number; bytesTotal: number }) => {
+      const percentage = (bytesDownloaded / bytesTotal) * 100;
+      console.log(`Download percentage for ${modelId}: ${percentage.toFixed(2)}%`);
+      setDownloadProgress((prev) => ({
+        ...prev,
+        [modelId]: percentage,
+      }));
+    });
 
-      task.done(
-        async ({
-          bytesDownloaded,
-          bytesTotal,
-        }: {
-          bytesDownloaded: number;
-          bytesTotal: number;
-        }) => {
-          const fileUri = task.metadata.fileUri as string;
-          console.log(`Download complete for ${modelId}!`, {
-            bytesDownloaded,
-            bytesTotal,
-            fileUri,
-          });
-          delete activeTasksRef.current[modelId];
-          setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
-          setDownloadProgress((prev) => ({ ...prev, [modelId]: 100 }));
-
-          // Persist metadata for fully downloaded model if we have a fileUri
-          try {
-            const current = await getDownloadedModels();
-            const existingModel = current[modelId];
-            if (existingModel) {
-              await saveDownloadedModel({
-                ...existingModel,
-                downloadInfo: {
-                  ...(existingModel.downloadInfo ?? {}),
-                  localFilePath: fileUri,
-                  status: "completed",
-                  downloadedAt: Date.now(),
-                },
-              });
-            }
-          } catch (err) {
-            console.error("Failed to save downloaded model metadata", err);
-          }
-
-          completeHandler(modelId);
-        },
-      );
-
-      task.error(({ error }: { error: any }) => {
-        console.error(`Error downloading ${modelId}:`, error);
-        delete activeTasksRef.current[modelId];
-        setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
-        setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
+    task.done(async ({ bytesDownloaded, bytesTotal }: { bytesDownloaded: number; bytesTotal: number }) => {
+      const fileUri = task.metadata.fileUri as string;
+      console.log(`Download complete for ${modelId}!`, {
+        bytesDownloaded,
+        bytesTotal,
+        fileUri,
       });
-    },
-    [],
-  );
+      delete activeTasksRef.current[modelId];
+      setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+      setDownloadProgress((prev) => ({ ...prev, [modelId]: 100 }));
+
+      // Persist metadata for fully downloaded model if we have a fileUri
+      try {
+        const current = await getDownloadedModels();
+        const existingModel = current[modelId];
+        if (existingModel) {
+          await saveDownloadedModel({
+            ...existingModel,
+            downloadInfo: {
+              ...(existingModel.downloadInfo ?? {}),
+              localFilePath: fileUri,
+              status: "completed",
+              downloadedAt: Date.now(),
+            },
+          });
+        }
+      } catch (err) {
+        console.error("Failed to save downloaded model metadata", err);
+      }
+
+      completeHandler(modelId);
+    });
+
+    task.error(({ error }: { error: any }) => {
+      console.error(`Error downloading ${modelId}:`, error);
+      delete activeTasksRef.current[modelId];
+      setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+      setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
+    });
+  }, []);
 
   // --- AUTOMATIC RE-ATTACH LOGIC ON MOUNT ---
   useEffect(() => {
@@ -110,9 +81,7 @@ export const useModelDownloader = () => {
           return;
         }
 
-        console.log(
-          `Recovered ${lostTasks.length} active downloads. Re-linking listeners...`,
-        );
+        console.log(`Recovered ${lostTasks.length} active downloads. Re-linking listeners...`);
 
         for (const nativeTask of lostTasks) {
           const modelId = nativeTask.id;
@@ -241,9 +210,7 @@ export const useModelDownloader = () => {
 
     for await (const model of modelsFromLocalStorage) {
       if (model.downloadInfo?.status === "pending") {
-        const isModelExist = await isFileAlreadyExistInLocalStorage(
-          model.downloadInfo?.localFilePath,
-        );
+        const isModelExist = await isFileAlreadyExistInLocalStorage(model.downloadInfo?.localFilePath);
 
         if (isModelExist) {
           await saveDownloadedModel({
@@ -260,9 +227,7 @@ export const useModelDownloader = () => {
     }
   };
 
-  const isFileAlreadyExistInLocalStorage = async (
-    fileUri: string | undefined,
-  ): Promise<boolean> => {
+  const isFileAlreadyExistInLocalStorage = async (fileUri: string | undefined): Promise<boolean> => {
     if (!fileUri) return false;
     const fileInfo = await FileSystem.getInfoAsync(fileUri);
     return fileInfo.exists;

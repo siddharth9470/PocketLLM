@@ -1,18 +1,8 @@
 import { useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
-import React, { useCallback, useEffect, useState } from "react";
-import {
-  Alert,
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import {
-  getDownloadedModelsList,
-  removeDownloadedModel,
-} from "../../storage/modelStorage";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { getDownloadedModelsList, removeDownloadedModel } from "../../storage/modelStorage";
 import type { HuggingFaceModel } from "../../types/models";
 
 export default function DownloadedModelsScreen() {
@@ -34,54 +24,43 @@ export default function DownloadedModelsScreen() {
 
   const shorten = (p: string) => {
     if (p.length <= 60) return p;
-    return "..." + p.slice(-57);
+    return `...${p.slice(-57)}`;
   };
 
   const handleDelete = async (item: HuggingFaceModel) => {
-    Alert.alert(
-      "Delete model",
-      `Delete ${item.name}? This will remove the file and metadata.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const path = item.downloadInfo?.localFilePath;
-              if (path) {
-                const info = await FileSystem.getInfoAsync(path);
-                if (info.exists) {
-                  await FileSystem.deleteAsync(path, { idempotent: true });
-                }
+    Alert.alert("Delete model", `Delete ${item.name}? This will remove the file and metadata.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const path = item.downloadInfo?.localFilePath;
+            if (path) {
+              const info = await FileSystem.getInfoAsync(path);
+              if (info.exists) {
+                await FileSystem.deleteAsync(path, { idempotent: true });
               }
-              await removeDownloadedModel(item.id);
-              await load();
-            } catch (err) {
-              console.error("Failed to delete model file", err);
-              Alert.alert("Error", "Unable to delete model file.");
             }
-          },
+            await removeDownloadedModel(item.id);
+            await load();
+          } catch (err) {
+            console.error("Failed to delete model file", err);
+            Alert.alert("Error", "Unable to delete model file.");
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   const renderItem = ({ item }: { item: HuggingFaceModel }) => (
     <View style={styles.row}>
       <View style={styles.meta}>
         <Text style={styles.name}>{item._id}</Text>
-        <Text style={styles.path}>
-          {shorten(item.downloadInfo?.localFilePath ?? "")}
-        </Text>
-        <Text style={styles.date}>
-          {new Date(item.downloadInfo?.downloadedAt ?? 0).toLocaleString()}
-        </Text>
+        <Text style={styles.path}>{shorten(item.downloadInfo?.localFilePath ?? "")}</Text>
+        <Text style={styles.date}>{new Date(item.downloadInfo?.downloadedAt ?? 0).toLocaleString()}</Text>
       </View>
-      <TouchableOpacity
-        style={styles.delete}
-        onPress={() => handleDelete(item)}
-      >
+      <TouchableOpacity style={styles.delete} onPress={() => handleDelete(item)}>
         <Text style={styles.deleteText}>Delete</Text>
       </TouchableOpacity>
     </View>
@@ -93,12 +72,8 @@ export default function DownloadedModelsScreen() {
         data={models}
         keyExtractor={(i) => i.id}
         renderItem={renderItem}
-        ListEmptyComponent={
-          <Text style={styles.empty}>No downloaded models found.</Text>
-        }
-        contentContainerStyle={
-          models.length === 0 ? styles.emptyContainer : undefined
-        }
+        ListEmptyComponent={<Text style={styles.empty}>No downloaded models found.</Text>}
+        contentContainerStyle={models.length === 0 ? styles.emptyContainer : undefined}
       />
     </View>
   );

@@ -1,12 +1,4 @@
-import {
-  createContext,
-  createElement,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useMemo,
-  useReducer,
-} from "react";
+import { createContext, createElement, type ReactNode, useContext, useMemo, useReducer } from "react";
 
 import { MOCK_CONVERSATIONS } from "../data/mockChats";
 import type { ChatMessage, Conversation } from "../types/chat";
@@ -26,10 +18,7 @@ type ChatAction =
   | { type: "setConversationModel"; conversationId: string; modelId: string }
   | { type: "sendMessage"; conversationId: string; content: string };
 
-function createMessage(
-  role: ChatMessage["role"],
-  content: string,
-): ChatMessage {
+function createMessage(role: ChatMessage["role"], content: string): ChatMessage {
   return {
     id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     role,
@@ -38,17 +27,12 @@ function createMessage(
   };
 }
 
-function chatReducer(
-  state: ChatStoreState,
-  action: ChatAction,
-): ChatStoreState {
+function chatReducer(state: ChatStoreState, action: ChatAction): ChatStoreState {
   switch (action.type) {
     case "setConversationModel":
       return {
         conversations: state.conversations.map((conversation) =>
-          conversation.id === action.conversationId
-            ? { ...conversation, modelId: action.modelId }
-            : conversation,
+          conversation.id === action.conversationId ? { ...conversation, modelId: action.modelId } : conversation,
         ),
       };
     case "sendMessage": {
@@ -69,11 +53,7 @@ function chatReducer(
             return conversation;
           }
 
-          const messages = [
-            ...conversation.messages,
-            userMessage,
-            assistantMessage,
-          ];
+          const messages = [...conversation.messages, userMessage, assistantMessage];
           return {
             ...conversation,
             messages,
@@ -98,16 +78,14 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<ChatStore>(
     () => ({
       conversations: state.conversations,
-      getConversation: (id) =>
-        state.conversations.find((conversation) => conversation.id === id),
+      getConversation: (id) => state.conversations.find((conversation) => conversation.id === id),
       setConversationModel: (conversationId, modelId) =>
         dispatch({
           type: "setConversationModel",
           conversationId,
           modelId,
         }),
-      sendMessage: (conversationId, content) =>
-        dispatch({ type: "sendMessage", conversationId, content }),
+      sendMessage: (conversationId, content) => dispatch({ type: "sendMessage", conversationId, content }),
     }),
     [state.conversations],
   );

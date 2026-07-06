@@ -12,17 +12,8 @@ export default function ChatBubble({ message }: ChatBubbleProps) {
 
   return (
     <View style={[styles.row, isUser ? styles.rowUser : styles.rowAssistant]}>
-      <View
-        style={[
-          styles.bubble,
-          isUser ? styles.userBubble : styles.assistantBubble,
-        ]}
-      >
-        <Text
-          style={[styles.text, isUser ? styles.userText : styles.assistantText]}
-        >
-          {message.content}
-        </Text>
+      <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
+        <Text style={[styles.text, isUser ? styles.userText : styles.assistantText]}>{message.content}</Text>
       </View>
     </View>
   );

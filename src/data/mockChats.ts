@@ -45,8 +45,7 @@ export const MOCK_CONVERSATIONS: Conversation[] = [
       {
         id: "m5",
         role: "assistant",
-        content:
-          "The download manager should expose progress callbacks and return a local file path when complete.",
+        content: "The download manager should expose progress callbacks and return a local file path when complete.",
         createdAt: "2026-05-18T11:05:00.000Z",
       },
     ],

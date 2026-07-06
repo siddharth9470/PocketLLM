@@ -1,9 +1,4 @@
-export type DownloadStatus =
-  | "idle"
-  | "pending"
-  | "downloading"
-  | "completed"
-  | "failed";
+export type DownloadStatus = "idle" | "pending" | "downloading" | "completed" | "failed";
 
 export interface HFSibling {
   rfilename: string;

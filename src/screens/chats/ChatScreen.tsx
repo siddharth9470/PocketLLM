@@ -12,20 +12,13 @@ import { CHAT_USER, toGiftedChatMessages } from "../../utils/giftedChatAdapter";
 
 export default function ChatScreen({ route }: ChatsStackScreenProps<"Chat">) {
   const { conversationId } = route.params;
-  const conversation = useChatStore((state) =>
-    state.getConversation(conversationId),
-  );
+  const conversation = useChatStore((state) => state.getConversation(conversationId));
   const sendMessage = useChatStore((state) => state.sendMessage);
-  const setConversationModel = useChatStore(
-    (state) => state.setConversationModel,
-  );
+  const setConversationModel = useChatStore((state) => state.setConversationModel);
 
   const headerHeight = useHeaderHeight();
 
-  const giftedMessages = useMemo(
-    () => toGiftedChatMessages(conversation?.messages ?? []),
-    [conversation?.messages],
-  );
+  const giftedMessages = useMemo(() => toGiftedChatMessages(conversation?.messages ?? []), [conversation?.messages]);
 
   const handleSend = useCallback(
     (messages: IMessage[] = []) => {

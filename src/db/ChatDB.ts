@@ -1,9 +1,4 @@
-import {
-  ANDROID_DATABASE_PATH,
-  type DB,
-  IOS_LIBRARY_PATH,
-  open,
-} from "@op-engineering/op-sqlite";
+import { ANDROID_DATABASE_PATH, type DB, IOS_LIBRARY_PATH, open } from "@op-engineering/op-sqlite";
 import { Platform } from "react-native";
 
 class ChatDatabaseManager {
@@ -40,13 +35,10 @@ class ChatDatabaseManager {
       this.db = open({
         name: "pocketllm_encrypted_chat.db",
         encryptionKey: hardwareKey,
-        location:
-          Platform.OS === "ios" ? IOS_LIBRARY_PATH : ANDROID_DATABASE_PATH,
+        location: Platform.OS === "ios" ? IOS_LIBRARY_PATH : ANDROID_DATABASE_PATH,
       });
 
-      console.log(
-        "🔒 SQLCipher Layer Verified. Database Decrypted and Unlocked.",
-      );
+      console.log("🔒 SQLCipher Layer Verified. Database Decrypted and Unlocked.");
 
       // Standardize schema layout
       this.db.execute(
@@ -58,40 +50,31 @@ class ChatDatabaseManager {
                 );`,
       );
     } catch (error) {
-      console.error(
-        "CRITICAL: Failed to decrypt secure application layer:",
-        error,
-      );
+      console.error("CRITICAL: Failed to decrypt secure application layer:", error);
       throw error;
     }
   }
 
   private getDatabaseConnection(): DB {
     if (!this.db) {
-      throw new Error(
-        "Database has not been initialized. Call initialize() first.",
-      );
+      throw new Error("Database has not been initialized. Call initialize() first.");
     }
     return this.db;
   }
 
-  public async createMessage(
-    id: string,
-    text: string,
-    senderType: "user" | "ai",
-  ) {
+  public async createMessage(id: string, text: string, senderType: "user" | "ai") {
     const connection = this.getDatabaseConnection();
-    await connection.execute(
-      "INSERT INTO messages (id, text, createdAt, senderType) VALUES (?, ?, ?, ?);",
-      [id, text, Date.now(), senderType],
-    );
+    await connection.execute("INSERT INTO messages (id, text, createdAt, senderType) VALUES (?, ?, ?, ?);", [
+      id,
+      text,
+      Date.now(),
+      senderType,
+    ]);
   }
 
   public async getAllMessages() {
     const connection = this.getDatabaseConnection();
-    const result = await connection.execute(
-      "SELECT * FROM messages ORDER BY createdAt ASC;",
-    );
+    const result = await connection.execute("SELECT * FROM messages ORDER BY createdAt ASC;");
     return result;
   }
 

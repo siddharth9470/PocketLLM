@@ -26,28 +26,14 @@ export default function MainTabNavigator() {
         },
       })}
     >
-      <Tab.Screen
-        name="ModelsTab"
-        component={ModelsStackNavigator}
-        options={{ title: "Models" }}
-      />
-      <Tab.Screen
-        name="ChatsTab"
-        component={ChatsStackNavigator}
-        options={{ title: "Chats" }}
-      />
-      <Tab.Screen
-        name="SettingsTab"
-        component={SettingsStackNavigator}
-        options={{ title: "Settings" }}
-      />
+      <Tab.Screen name="ModelsTab" component={ModelsStackNavigator} options={{ title: "Models" }} />
+      <Tab.Screen name="ChatsTab" component={ChatsStackNavigator} options={{ title: "Chats" }} />
+      <Tab.Screen name="SettingsTab" component={SettingsStackNavigator} options={{ title: "Settings" }} />
     </Tab.Navigator>
   );
 }
 
-function getTabIcon(
-  routeName: keyof MainTabParamList,
-): keyof typeof Ionicons.glyphMap {
+function getTabIcon(routeName: keyof MainTabParamList): keyof typeof Ionicons.glyphMap {
   switch (routeName) {
     case "ModelsTab":
       return "cube-outline";

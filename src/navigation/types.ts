@@ -27,26 +27,21 @@ export type SettingsStackParamList = {
   Settings: undefined;
 };
 
-export type RootStackScreenProps<T extends keyof RootStackParamList> =
-  NativeStackScreenProps<RootStackParamList, T>;
+export type RootStackScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;
 
-export type MainTabScreenProps<T extends keyof MainTabParamList> =
-  BottomTabScreenProps<MainTabParamList, T>;
+export type MainTabScreenProps<T extends keyof MainTabParamList> = BottomTabScreenProps<MainTabParamList, T>;
 
-export type ModelsStackScreenProps<T extends keyof ModelsStackParamList> =
-  CompositeScreenProps<
-    NativeStackScreenProps<ModelsStackParamList, T>,
-    BottomTabScreenProps<MainTabParamList>
-  >;
+export type ModelsStackScreenProps<T extends keyof ModelsStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<ModelsStackParamList, T>,
+  BottomTabScreenProps<MainTabParamList>
+>;
 
-export type ChatsStackScreenProps<T extends keyof ChatsStackParamList> =
-  CompositeScreenProps<
-    NativeStackScreenProps<ChatsStackParamList, T>,
-    BottomTabScreenProps<MainTabParamList>
-  >;
+export type ChatsStackScreenProps<T extends keyof ChatsStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<ChatsStackParamList, T>,
+  BottomTabScreenProps<MainTabParamList>
+>;
 
-export type SettingsStackScreenProps<T extends keyof SettingsStackParamList> =
-  CompositeScreenProps<
-    NativeStackScreenProps<SettingsStackParamList, T>,
-    BottomTabScreenProps<MainTabParamList>
-  >;
+export type SettingsStackScreenProps<T extends keyof SettingsStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<SettingsStackParamList, T>,
+  BottomTabScreenProps<MainTabParamList>
+>;

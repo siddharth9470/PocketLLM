@@ -41,10 +41,7 @@ async function request<T>(
 
   // Setup Timeout
   const controller = new AbortController();
-  const id = setTimeout(
-    () => controller.abort(),
-    options?.timeoutMs ?? API_CONFIG.TIMEOUT_MS,
-  );
+  const id = setTimeout(() => controller.abort(), options?.timeoutMs ?? API_CONFIG.TIMEOUT_MS);
 
   const config: RequestInit = {
     method,
@@ -66,9 +63,7 @@ async function request<T>(
     const data = text ? JSON.parse(text) : null;
 
     if (!response.ok) {
-      throw new Error(
-        data?.message || `Error ${response.status}: ${response.statusText}`,
-      );
+      throw new Error(data?.message || `Error ${response.status}: ${response.statusText}`);
     }
 
     return {
@@ -83,23 +78,14 @@ async function request<T>(
 }
 
 // 4. Exported Convenience Functions (What you use in your code)
-export const getRequest = <T>(
-  endpoint: string,
-  params?: Record<string, unknown>,
-  options?: RequestOptions,
-) => request<T>("GET", endpoint, undefined, { ...options, params });
+export const getRequest = <T>(endpoint: string, params?: Record<string, unknown>, options?: RequestOptions) =>
+  request<T>("GET", endpoint, undefined, { ...options, params });
 
-export const postRequest = <T>(
-  endpoint: string,
-  data?: unknown,
-  options?: RequestOptions,
-) => request<T>("POST", endpoint, data, options);
+export const postRequest = <T>(endpoint: string, data?: unknown, options?: RequestOptions) =>
+  request<T>("POST", endpoint, data, options);
 
-export const putRequest = <T>(
-  endpoint: string,
-  data?: unknown,
-  options?: RequestOptions,
-) => request<T>("PUT", endpoint, data, options);
+export const putRequest = <T>(endpoint: string, data?: unknown, options?: RequestOptions) =>
+  request<T>("PUT", endpoint, data, options);
 
 export const deleteRequest = <T>(endpoint: string, options?: RequestOptions) =>
   request<T>("DELETE", endpoint, undefined, options);

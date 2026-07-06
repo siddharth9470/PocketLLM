@@ -5,9 +5,7 @@ const STORAGE_KEY = "downloadedModels_v1";
 
 type DownloadedMap = Record<string, HuggingFaceModel>;
 
-export async function getDownloadedModels(): Promise<
-  Record<string, HuggingFaceModel>
-> {
+export async function getDownloadedModels(): Promise<Record<string, HuggingFaceModel>> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
@@ -26,11 +24,7 @@ export async function getDownloadedModelsList(): Promise<HuggingFaceModel[]> {
   try {
     const map = await getDownloadedModels();
     return Object.values(map)
-      .sort(
-        (a, b) =>
-          (b.downloadInfo?.downloadedAt ?? 0) -
-          (a.downloadInfo?.downloadedAt ?? 0),
-      )
+      .sort((a, b) => (b.downloadInfo?.downloadedAt ?? 0) - (a.downloadInfo?.downloadedAt ?? 0))
       .filter((model) => model.downloadInfo?.downloadedAt !== undefined);
   } catch (error) {
     console.error("getDownloadedModels error", error);
@@ -38,9 +32,7 @@ export async function getDownloadedModelsList(): Promise<HuggingFaceModel[]> {
   }
 }
 
-export async function saveDownloadedModel(
-  model: HuggingFaceModel,
-): Promise<void> {
+export async function saveDownloadedModel(model: HuggingFaceModel): Promise<void> {
   try {
     const current = await getDownloadedModels();
     current[model.id] = model;

@@ -34,10 +34,7 @@ const getCryptoHardwareKey = async () => {
     }
     return hardwareKey;
   } catch (error) {
-    console.error(
-      "CRITICAL: Failed to decrypt secure application layer:",
-      error,
-    );
+    console.error("CRITICAL: Failed to decrypt secure application layer:", error);
     throw error;
   }
 };

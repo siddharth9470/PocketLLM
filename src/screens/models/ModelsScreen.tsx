@@ -1,40 +1,23 @@
 import { Ionicons } from "@expo/vector-icons";
-import { initLlama, loadLlamaModelInfo } from "llama.rn";
 import { useCallback, useEffect, useState } from "react";
-import {
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { getRequest } from "../../api/apiClient";
+import { FlatList, StyleSheet, TouchableOpacity, View } from "react-native";
 import ModelCard from "../../components/ModelCard";
 import { colors, spacing } from "../../constants/theme";
 import type { ModelsStackScreenProps } from "../../navigation/types";
-import { initializeModel, initiateChat } from "../../services/chatHelper";
 import { useModelDownloader } from "../../services/useModelDownloader";
 import type { HuggingFaceModel } from "../../types/models";
 
 export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
   const [huggingFaceModels, setHFModels] = useState<HuggingFaceModel[]>([]);
-  const {
-    startDownload,
-    cancelDownload,
-    downloadProgress,
-    activeDownloads,
-    retreiveCompletedDownloads,
-  } = useModelDownloader();
+  const { startDownload, cancelDownload, downloadProgress, activeDownloads, retreiveCompletedDownloads } =
+    useModelDownloader();
   const { navigation } = props;
 
   // Add header button to navigate to downloaded models screen
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity
-          onPress={() => navigation.navigate("DownloadedModels")}
-          style={{ marginRight: 12 }}
-        >
+        <TouchableOpacity onPress={() => navigation.navigate("DownloadedModels")} style={{ marginRight: 12 }}>
           <Ionicons name="download-outline" size={20} color={colors.primary} />
         </TouchableOpacity>
       ),

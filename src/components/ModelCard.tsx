@@ -27,10 +27,8 @@ export default function ModelCard(props: ModelCardProps) {
     isDownloading,
     progress = 0,
   } = props;
-  const downloading =
-    typeof isDownloading === "boolean" ? isDownloading : activeDownload;
-  const currentProgress =
-    typeof props.progress === "number" ? props.progress : downloadProgress;
+  const downloading = typeof isDownloading === "boolean" ? isDownloading : activeDownload;
+  const currentProgress = typeof props.progress === "number" ? props.progress : downloadProgress;
 
   const { name } = parseModelId(model.id);
 
@@ -41,19 +39,11 @@ export default function ModelCard(props: ModelCardProps) {
 
       <View style={styles.metricsRow}>
         <View style={styles.metric}>
-          <Ionicons
-            name="download-outline"
-            size={16}
-            color={colors.textSecondary}
-          />
+          <Ionicons name="download-outline" size={16} color={colors.textSecondary} />
           <Text style={styles.metricText}>{formatCount(model.downloads)}</Text>
         </View>
         <View style={styles.metric}>
-          <Ionicons
-            name="heart-outline"
-            size={16}
-            color={colors.textSecondary}
-          />
+          <Ionicons name="heart-outline" size={16} color={colors.textSecondary} />
           <Text style={styles.metricText}>{formatCount(model.likes)}</Text>
         </View>
       </View>
@@ -72,13 +62,9 @@ export default function ModelCard(props: ModelCardProps) {
       {downloading ? (
         <>
           <View style={styles.progressTrack}>
-            <View
-              style={[styles.progressFill, { width: `${currentProgress}%` }]}
-            />
+            <View style={[styles.progressFill, { width: `${currentProgress}%` }]} />
           </View>
-          <Text style={styles.progressText}>
-            Downloading {Math.round(currentProgress)}%
-          </Text>
+          <Text style={styles.progressText}>Downloading {Math.round(currentProgress)}%</Text>
         </>
       ) : (
         <PrimaryButton
@@ -86,10 +72,7 @@ export default function ModelCard(props: ModelCardProps) {
           onPress={async () => onClickDownload(model)}
           loading={activeDownload}
           variant={isDownloaded ? "secondary" : "primary"}
-          style={[
-            styles.downloadButton,
-            isDownloaded && styles.completedButton,
-          ]}
+          style={[styles.downloadButton, isDownloaded && styles.completedButton]}
         />
       )}
     </View>

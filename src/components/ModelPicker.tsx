@@ -1,15 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useState } from "react";
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, radii, spacing, typography } from "../constants/theme";
 import { getDownloadedModelsList } from "../storage/modelStorage";
 import type { HuggingFaceModel } from "../types/models";
@@ -25,9 +17,7 @@ export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
   const [visible, setVisible] = useState(false);
 
   const [availableModel, setAvailableModel] = useState<HuggingFaceModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState<
-    HuggingFaceModel | undefined
-  >();
+  const [selectedModel, setSelectedModel] = useState<HuggingFaceModel | undefined>();
 
   const load = useCallback(async () => {
     try {
@@ -55,13 +45,7 @@ export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
   const renderModels = useCallback(
     ({ item }: { item: HuggingFaceModel }) => {
       const isSelected = item.id === selectedModel?.id;
-      return (
-        <ModelListItem
-          item={item}
-          isSelected={isSelected}
-          onSelect={handleSelect}
-        />
-      );
+      return <ModelListItem item={item} isSelected={isSelected} onSelect={handleSelect} />;
     },
     [selectedModel, handleSelect],
   );
@@ -69,15 +53,9 @@ export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
   return (
     <>
       <Pressable style={styles.trigger} onPress={() => setVisible(true)}>
-        <Ionicons
-          name="hardware-chip-outline"
-          size={16}
-          color={colors.primary}
-        />
+        <Ionicons name="hardware-chip-outline" size={16} color={colors.primary} />
         <Text style={styles.triggerText} numberOfLines={1}>
-          {selectedModel
-            ? parseModelId(selectedModel.id).name
-            : "Select a Modal"}
+          {selectedModel ? parseModelId(selectedModel.id).name : "Select a Modal"}
         </Text>
         <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
       </Pressable>
@@ -87,15 +65,9 @@ export default function ModelPicker({ onSelectModel }: ModelPickerProps) {
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>Active Model</Text>
             {availableModel.length === 0 ? (
-              <Text style={styles.emptyText}>
-                Download a model from the Models tab to use it in chat.
-              </Text>
+              <Text style={styles.emptyText}>Download a model from the Models tab to use it in chat.</Text>
             ) : (
-              <FlatList
-                data={availableModel}
-                renderItem={renderModels}
-                keyExtractor={(item) => item.id}
-              />
+              <FlatList data={availableModel} renderItem={renderModels} keyExtractor={(item) => item.id} />
             )}
           </View>
         </Pressable>
@@ -117,17 +89,12 @@ const ModelListItem = memo(
     const { author, name } = parseModelId(item.id);
 
     return (
-      <Pressable
-        style={[styles.option, isSelected && styles.optionSelected]}
-        onPress={() => onSelect(item)}
-      >
+      <Pressable style={[styles.option, isSelected && styles.optionSelected]} onPress={() => onSelect(item)}>
         <View style={styles.optionTextWrap}>
           <Text style={styles.optionName}>{name}</Text>
           <Text style={styles.optionAuthor}>{author}</Text>
         </View>
-        {isSelected && (
-          <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-        )}
+        {isSelected && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
       </Pressable>
     );
   },
