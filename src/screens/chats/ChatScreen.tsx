@@ -131,6 +131,14 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     [conversation?.messages],
   );
 
+  const hasStreamingContent = useMemo(
+    () =>
+      conversation?.messages?.some(
+        (message) => message.status === "streaming" && message.content.trim().length > 0,
+      ) ?? false,
+    [conversation?.messages],
+  );
+
   const handleSend = useCallback(
     (messages: IMessage[] = []) => {
       if (isSending || !isModelReady || !selectedModelId) {
@@ -242,7 +250,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
             renderSend={renderSend}
             renderAvatar={() => null}
             isUserAvatarVisible={false}
-            isTyping={isSending}
+            isTyping={isSending && !hasStreamingContent}
             messagesContainerStyle={styles.messagesContainer}
             textInputProps={{
               style: styles.composerInput,

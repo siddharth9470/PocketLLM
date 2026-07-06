@@ -1,11 +1,22 @@
 import * as FileSystem from "expo-file-system/legacy";
-import { initLlama, type ContextParams, type LlamaContext, type RNLlamaOAICompatibleMessage } from "llama.rn";
+import {
+  type ContextParams,
+  initLlama,
+  type LlamaContext,
+  type RNLlamaOAICompatibleMessage,
+  type TokenData,
+} from "llama.rn";
 import { Platform } from "react-native";
 
 import { ChatScreenLabels, DEFAULT_SYSTEM_PROMPT } from "../constants/chat";
 import { getDownloadedModels } from "../db/ModelDB";
 import type { ChatMessage } from "../types/chat";
 import { isLanguageModelGgufFilename } from "../utils/ggufFileSelection";
+import {
+  sanitizeAssistantResponse,
+  stripReasoningTags,
+  stripReasoningTagsForStreaming,
+} from "../utils/reasoningFilter";
 
 let llamaContext: LlamaContext | null = null;
 let loadedModelPath: string | null = null;
@@ -20,6 +31,13 @@ export interface ChatCompletionResult {
 export interface InferenceErrorInfo {
   userMessage: string;
   logMessage: string;
+}
+
+export type InferenceTokenHandler = (displayText: string) => void;
+
+function extractStreamingDisplayText(data: TokenData): string {
+  const raw = data.content ?? data.accumulated_text ?? "";
+  return stripReasoningTagsForStreaming(raw);
 }
 
 const STOP_WORDS = [
@@ -77,11 +95,7 @@ export async function resolveDownloadedModelPath(modelId: string): Promise<strin
   const model = downloadedModels[modelId];
   const localFilePath = model?.downloadInfo?.localFilePath;
 
-  if (
-    model?.downloadInfo?.status === "completed" &&
-    localFilePath &&
-    isLanguageModelGgufFilename(localFilePath)
-  ) {
+  if (model?.downloadInfo?.status === "completed" && localFilePath && isLanguageModelGgufFilename(localFilePath)) {
     return localFilePath;
   }
 
@@ -124,9 +138,15 @@ export function buildChatContextFromHistory(
   const recentMessages = eligibleMessages.slice(-MAX_CONTEXT_MESSAGES);
 
   for (const message of recentMessages) {
+    const content = message.role === "assistant" ? stripReasoningTags(message.content) : message.content;
+
+    if (message.role === "assistant" && content.length === 0) {
+      continue;
+    }
+
     context.push({
       role: message.role,
-      content: message.content,
+      content,
     });
   }
 
@@ -212,6 +232,7 @@ export async function initializeModel(modelPath: string): Promise<void> {
 export async function runInference(
   modelPath: string,
   messages: RNLlamaOAICompatibleMessage[],
+  onToken?: InferenceTokenHandler,
 ): Promise<ChatCompletionResult> {
   await initializeModel(modelPath);
 
@@ -222,15 +243,28 @@ export async function runInference(
   try {
     await llamaContext.clearCache(false);
 
+    const jinjaSupported = await llamaContext.isJinjaSupported();
+    const completionParams = {
+      messages,
+      n_predict: 256,
+      stop: STOP_WORDS,
+      ...(jinjaSupported
+        ? {
+            jinja: true,
+            enable_thinking: false,
+            reasoning_format: "none" as const,
+            chat_template_kwargs: { enable_thinking: false },
+          }
+        : {}),
+    };
+
     const msgResult = await llamaContext.completion(
-      {
-        messages,
-        n_predict: 256,
-        stop: STOP_WORDS,
-      },
-      (_data) => {
-        // Future enhancement: stream tokens to UI state as they generate.
-      },
+      completionParams,
+      onToken
+        ? (data: TokenData) => {
+            onToken(extractStreamingDisplayText(data));
+          }
+        : undefined,
     );
 
     const timings = msgResult.timings;
@@ -238,9 +272,10 @@ export async function runInference(
     const completionTokens = msgResult.tokens_predicted;
     const promptTokens = msgResult.tokens_evaluated;
     const tokensPerSecond = timings?.predicted_per_second;
+    const cleanedText = sanitizeAssistantResponse(msgResult.text, msgResult.content);
 
     return {
-      text: msgResult.text,
+      text: cleanedText,
       metrics: {
         ...(tokensPerSecond !== undefined ? { tokensPerSecond } : {}),
         ...(promptTokens !== undefined ? { promptTokens } : {}),
@@ -254,9 +289,22 @@ export async function runInference(
   }
 }
 
+export async function stopInference(): Promise<void> {
+  if (!llamaContext) {
+    return;
+  }
+
+  try {
+    await llamaContext.stopCompletion();
+  } catch (error) {
+    console.error("Failed to stop Llama completion:", error);
+  }
+}
+
 export async function releaseModel(): Promise<void> {
   if (llamaContext) {
     try {
+      await llamaContext.stopCompletion();
       await llamaContext.release();
     } catch (error) {
       console.error("Failed to release Llama model:", error);

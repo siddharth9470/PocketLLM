@@ -50,6 +50,8 @@ interface ChatStore {
   sendMessage: (conversationId: string, content: string, options: SendMessageOptions) => Promise<void>;
 }
 
+const STREAMING_UI_INTERVAL_MS = 48;
+
 const ChatStoreContext = createContext<ChatStore | undefined>(undefined);
 
 function buildUserMessage(conversationId: string, content: string): ChatMessage {
@@ -69,9 +71,10 @@ function buildAssistantMessage(
   status: ChatMessage["status"],
   metrics?: ChatMessage["metrics"],
   error?: string,
+  id?: string,
 ): ChatMessage {
   return {
-    id: generateChatId(),
+    id: id ?? generateChatId(),
     conversationId,
     role: "assistant",
     content,
@@ -289,17 +292,89 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         const history = await getMessagesByConversationId(conversationId);
         const contextMessages = buildChatContextFromHistory(history);
 
+        const assistantMessageId = generateChatId();
+        const assistantCreatedAt = new Date().toISOString();
+
+        const appendStreamingPlaceholder = (content: string): void => {
+          if (!isConversationFocused(conversationId)) {
+            return;
+          }
+
+          setConversationDetails((prev) => {
+            const current = prev[conversationId];
+            if (!current) {
+              return prev;
+            }
+
+            const messages = current.messages ?? [];
+            const existingIndex = messages.findIndex((message) => message.id === assistantMessageId);
+
+            if (existingIndex === -1) {
+              const streamingMessage: ChatMessage = {
+                id: assistantMessageId,
+                conversationId,
+                role: "assistant",
+                content,
+                status: "streaming",
+                createdAt: assistantCreatedAt,
+              };
+
+              return {
+                ...prev,
+                [conversationId]: {
+                  ...current,
+                  messages: [...messages, streamingMessage],
+                },
+              };
+            }
+
+            const updatedMessages = [...messages];
+            updatedMessages[existingIndex] = {
+              ...updatedMessages[existingIndex],
+              content,
+              status: "streaming",
+            };
+
+            return {
+              ...prev,
+              [conversationId]: {
+                ...current,
+                messages: updatedMessages,
+              },
+            };
+          });
+        };
+
+        let latestStreamContent = "";
+        let lastStreamUiFlushAt = 0;
+
+        const onToken = (displayText: string): void => {
+          latestStreamContent = displayText;
+
+          const now = Date.now();
+          if (now - lastStreamUiFlushAt < STREAMING_UI_INTERVAL_MS) {
+            return;
+          }
+
+          lastStreamUiFlushAt = now;
+          appendStreamingPlaceholder(displayText);
+        };
+
         let assistantContent: string = ChatScreenLabels.INFERENCE_FAILED;
         let assistantStatus: ChatMessage["status"] = "completed";
         let assistantError: string | undefined;
         let assistantMetrics: ChatMessage["metrics"] | undefined;
 
         try {
-          const completion = await runInference(modelPath, contextMessages);
+          const completion = await runInference(modelPath, contextMessages, onToken);
           assistantContent =
             sanitizeAssistantResponse(completion.text).trim() ||
             ChatScreenLabels.INFERENCE_FAILED;
           assistantMetrics = completion.metrics;
+
+          if (latestStreamContent !== assistantContent) {
+            appendStreamingPlaceholder(assistantContent);
+          }
         } catch (error) {
           const classified = classifyInferenceError(error);
           assistantStatus = "error";
@@ -315,6 +390,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           assistantStatus,
           assistantMetrics,
           assistantError,
+          assistantMessageId,
         );
 
         await createMessage(assistantMessage);
@@ -325,7 +401,43 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           updatedAt: responseTimestamp,
         });
 
-        await syncConversationCache(conversationId);
+        if (isConversationFocused(conversationId)) {
+          setConversationDetails((prev) => {
+            const current = prev[conversationId];
+            if (!current) {
+              return prev;
+            }
+
+            const messages = current.messages ?? [];
+            const existingIndex = messages.findIndex((message) => message.id === assistantMessageId);
+
+            if (existingIndex === -1) {
+              return {
+                ...prev,
+                [conversationId]: {
+                  ...current,
+                  preview: buildConversationPreview(assistantContent),
+                  updatedAt: responseTimestamp,
+                  messages: [...messages, assistantMessage],
+                },
+              };
+            }
+
+            const updatedMessages = [...messages];
+            updatedMessages[existingIndex] = assistantMessage;
+
+            return {
+              ...prev,
+              [conversationId]: {
+                ...current,
+                preview: buildConversationPreview(assistantContent),
+                updatedAt: responseTimestamp,
+                messages: updatedMessages,
+              },
+            };
+          });
+        }
+
         await refreshConversations();
       } catch (error) {
         console.error("Failed to send message:", error);

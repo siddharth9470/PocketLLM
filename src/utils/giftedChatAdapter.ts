@@ -15,7 +15,17 @@ export const CHAT_ASSISTANT: User = {
 
 export function toGiftedChatMessages(messages: ChatMessage[]): IMessage[] {
   return [...messages]
-    .filter((message) => message.role === "user" || message.role === "assistant")
+    .filter((message) => {
+      if (message.role !== "user" && message.role !== "assistant") {
+        return false;
+      }
+
+      if (message.status === "streaming" && message.content.trim().length === 0) {
+        return false;
+      }
+
+      return true;
+    })
     .reverse()
     .map((message) => {
       const createdAt = new Date(message.createdAt);
@@ -23,7 +33,9 @@ export function toGiftedChatMessages(messages: ChatMessage[]): IMessage[] {
 
       const text =
         message.role === "assistant"
-          ? stripReasoningTags(message.content)
+          ? message.status === "streaming"
+            ? message.content
+            : stripReasoningTags(message.content)
           : message.content;
 
       return {
