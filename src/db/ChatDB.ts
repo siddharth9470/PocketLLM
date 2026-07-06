@@ -211,6 +211,8 @@ class ChatDatabaseManager {
 
   public async deleteConversation(conversationId: string): Promise<void> {
     const connection = this.getDatabaseConnection();
+
+    await connection.execute("DELETE FROM chat_messages WHERE conversation_id = ?;", [conversationId]);
     await connection.execute("DELETE FROM conversations WHERE id = ?;", [conversationId]);
   }
 

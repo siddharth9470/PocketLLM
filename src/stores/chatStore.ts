@@ -15,6 +15,7 @@ import {
   conversationExists,
   createConversation,
   createMessage,
+  deleteConversation,
   getConversationById,
   getConversations,
   getMessagesByConversationId,
@@ -46,6 +47,7 @@ interface ChatStore {
   createConversationId: () => string;
   setActiveConversationId: (conversationId: string | null) => void;
   setConversationModel: (conversationId: string, modelId: string) => Promise<void>;
+  deleteConversation: (conversationId: string) => Promise<void>;
   sendMessage: (conversationId: string, content: string, options: SendMessageOptions) => Promise<void>;
 }
 
@@ -437,8 +439,22 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         setIsSending(false);
       }
     },
-    [isConversationFocused, refreshConversations, syncConversationCache],
+    [isConversationFocused, refreshConversations],
   );
+
+  const deleteConversationById = useCallback(async (conversationId: string): Promise<void> => {
+    await deleteConversation(conversationId);
+
+    setConversations((prev) => prev.filter((conversation) => conversation.id !== conversationId));
+    setConversationDetails((prev) => {
+      if (!(conversationId in prev)) {
+        return prev;
+      }
+
+      const { [conversationId]: _removed, ...rest } = prev;
+      return rest;
+    });
+  }, []);
 
   const value = useMemo<ChatStore>(
     () => ({
@@ -452,6 +468,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       createConversationId: generateChatId,
       setActiveConversationId,
       setConversationModel,
+      deleteConversation: deleteConversationById,
       sendMessage,
     }),
     [
@@ -464,6 +481,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       getConversation,
       setActiveConversationId,
       setConversationModel,
+      deleteConversationById,
       sendMessage,
     ],
   );

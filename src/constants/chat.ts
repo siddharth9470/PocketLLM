@@ -1,6 +1,12 @@
 export const ChatScreenLabels = {
   EMPTY_STATE: "There is no chat.",
   CREATE_NEW_CHAT: "Create New Chat",
+  DELETE_CHAT_TITLE: "Delete Chat",
+  DELETE_CHAT_MESSAGE: "This will permanently delete this conversation and all its messages.",
+  DELETE_CHAT_CONFIRM: "Delete",
+  DELETE_CHAT_CANCEL: "Cancel",
+  DELETE_CHAT_FAILED: "Could not delete this chat. Please try again.",
+  DELETE_CHAT_ACCESSIBILITY: "Delete chat",
   NEW_CHAT_TITLE: "New Chat",
   COMPOSER_PLACEHOLDER: "Type a message...",
   MODEL_REQUIRED: "Select a downloaded model to start chatting.",
