@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { memo, useCallback, useState } from "react";
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { memo, useCallback, useMemo, useState } from "react";
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import {
   ModelFilterSortLabels,
@@ -10,6 +10,13 @@ import {
   type SortOption,
 } from "../constants/modelFilters";
 import { colors, radii, spacing, typography } from "../constants/theme";
+
+const CHIP_GRID = {
+  MIN_CHIP_WIDTH: 108,
+  SHEET_HORIZONTAL_PADDING: spacing.lg * 2,
+  MAX_COLUMNS: 4,
+  MIN_COLUMNS: 2,
+} as const;
 
 interface ModelFilterSortSheetProps {
   sortBy: SortOption;
@@ -36,7 +43,9 @@ const FilterChipItem = memo(({ label, isActive, onPress }: FilterChipItemProps) 
     accessibilityRole="button"
     accessibilityState={{ selected: isActive }}
   >
-    <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{label}</Text>
+    <Text style={[styles.chipText, isActive && styles.chipTextActive]} numberOfLines={1} ellipsizeMode="tail">
+      {label}
+    </Text>
   </Pressable>
 ));
 
@@ -70,6 +79,15 @@ export default function ModelFilterSortSheet({
   onTogglePipelineTag,
 }: ModelFilterSortSheetProps) {
   const [visible, setVisible] = useState(false);
+  const { width: windowWidth } = useWindowDimensions();
+
+  const chipColumnCount = useMemo(() => {
+    const availableWidth = windowWidth - CHIP_GRID.SHEET_HORIZONTAL_PADDING;
+    return Math.min(
+      CHIP_GRID.MAX_COLUMNS,
+      Math.max(CHIP_GRID.MIN_COLUMNS, Math.floor(availableWidth / CHIP_GRID.MIN_CHIP_WIDTH)),
+    );
+  }, [windowWidth]);
 
   const closeSheet = useCallback(() => {
     setVisible(false);
@@ -162,8 +180,9 @@ export default function ModelFilterSortSheet({
                     data={uniqueAuthors}
                     renderItem={renderAuthorItem}
                     keyExtractor={keyExtractor}
+                    numColumns={chipColumnCount}
                     scrollEnabled={false}
-                    contentContainerStyle={styles.chipList}
+                    columnWrapperStyle={styles.chipRow}
                   />
                 </View>
               )}
@@ -175,8 +194,9 @@ export default function ModelFilterSortSheet({
                     data={uniquePipelineTags}
                     renderItem={renderPipelineTagItem}
                     keyExtractor={keyExtractor}
+                    numColumns={chipColumnCount}
                     scrollEnabled={false}
-                    contentContainerStyle={styles.chipList}
+                    columnWrapperStyle={styles.chipRow}
                   />
                 </View>
               )}
@@ -305,14 +325,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     opacity: 0.9,
   },
-  chipList: {
+  chipRow: {
     gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   chip: {
-    alignSelf: "flex-start",
+    flex: 1,
+    alignItems: "center",
     backgroundColor: colors.chipBackground,
     borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderWidth: 1,
     borderColor: colors.border,
@@ -324,6 +346,7 @@ const styles = StyleSheet.create({
   chipText: {
     ...typography.chip,
     color: colors.chipText,
+    textAlign: "center",
   },
   chipTextActive: {
     color: colors.surface,
