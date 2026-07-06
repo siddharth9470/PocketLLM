@@ -1,8 +1,18 @@
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Keyboard, Pressable, StyleSheet, Text, View } from "react-native";
-import { Bubble, GiftedChat, InputToolbar, type IMessage, Send } from "react-native-gifted-chat";
+import {
+  ActivityIndicator,
+  Alert,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  type TextInputContentSizeChangeEvent,
+  View,
+} from "react-native";
+import { TextInput } from "react-native-gesture-handler";
+import { Bubble, type Composer, GiftedChat, type IMessage, InputToolbar, Send } from "react-native-gifted-chat";
 
 import ModelPicker from "../../components/ModelPicker";
 import { ChatScreenLabels } from "../../constants/chat";
@@ -20,6 +30,55 @@ import type { HuggingFaceModel } from "../../types/models";
 import { generateChatId } from "../../utils/chatIds";
 import { isLanguageModelGgufFilename } from "../../utils/ggufFileSelection";
 import { CHAT_USER, toGiftedChatMessages } from "../../utils/giftedChatAdapter";
+
+const COMPOSER_LINE_HEIGHT = 22;
+const COMPOSER_VERTICAL_PADDING = spacing.sm * 2;
+const COMPOSER_MIN_HEIGHT = COMPOSER_LINE_HEIGHT + COMPOSER_VERTICAL_PADDING;
+const COMPOSER_MAX_LINES = 6;
+const COMPOSER_MAX_HEIGHT = COMPOSER_LINE_HEIGHT * COMPOSER_MAX_LINES + COMPOSER_VERTICAL_PADDING;
+
+function ChatComposer({ text = "", textInputProps }: ComponentProps<typeof Composer>) {
+  const [inputHeight, setInputHeight] = useState(COMPOSER_MIN_HEIGHT);
+
+  useEffect(() => {
+    if (!text) {
+      setInputHeight(COMPOSER_MIN_HEIGHT);
+    }
+  }, [text]);
+
+  const handleContentSizeChange = useCallback(
+    (event: TextInputContentSizeChangeEvent) => {
+      const contentHeight = event.nativeEvent.contentSize.height;
+      const nextHeight = Math.min(COMPOSER_MAX_HEIGHT, Math.max(COMPOSER_MIN_HEIGHT, contentHeight));
+
+      setInputHeight(nextHeight);
+      textInputProps?.onContentSizeChange?.(event);
+    },
+    [textInputProps],
+  );
+
+  const placeholder = textInputProps?.placeholder ?? ChatScreenLabels.COMPOSER_PLACEHOLDER;
+
+  return (
+    <View style={styles.composerContainer}>
+      <TextInput
+        {...textInputProps}
+        testID={placeholder}
+        accessible
+        accessibilityLabel={placeholder}
+        value={text}
+        multiline
+        scrollEnabled={inputHeight >= COMPOSER_MAX_HEIGHT}
+        enablesReturnKeyAutomatically
+        underlineColorAndroid="transparent"
+        keyboardAppearance="light"
+        placeholder={placeholder}
+        onContentSizeChange={handleContentSizeChange}
+        style={[styles.composerInput, { height: Math.max(COMPOSER_MIN_HEIGHT, inputHeight) }, textInputProps?.style]}
+      />
+    </View>
+  );
+}
 
 function isDownloadReadyModel(model: HuggingFaceModel): boolean {
   const localFilePath = model.downloadInfo?.localFilePath;
@@ -135,13 +194,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     }
 
     setIsModelPickerVisible(true);
-  }, [
-    conversation?.modelId,
-    isChatUiMounted,
-    isInitialLoad,
-    isModelReady,
-    selectedModelId,
-  ]);
+  }, [conversation?.modelId, isChatUiMounted, isInitialLoad, isModelReady, selectedModelId]);
 
   useEffect(() => {
     if (!isChatUiMounted || !conversation?.title) {
@@ -193,6 +246,17 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
       />
     ),
     [],
+  );
+
+  const renderComposer = useCallback((props: ComponentProps<typeof Composer>) => <ChatComposer {...props} />, []);
+
+  const composerTextInputProps = useMemo(
+    () => ({
+      editable: isModelReady,
+      placeholder: isModelReady ? ChatScreenLabels.COMPOSER_PLACEHOLDER : ChatScreenLabels.MODEL_REQUIRED,
+      placeholderTextColor: colors.textSecondary,
+    }),
+    [isModelReady],
   );
 
   const handleSelectModel = useCallback(
@@ -283,20 +347,14 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
             messageIdGenerator={generateChatId}
             renderBubble={renderBubble}
             renderInputToolbar={renderInputToolbar}
+            renderComposer={renderComposer}
             renderSend={renderSend}
             isSendButtonAlwaysVisible
             renderAvatar={() => null}
             isUserAvatarVisible={false}
             isTyping={isSending && !hasStreamingContent}
             messagesContainerStyle={styles.messagesContainer}
-            textInputProps={{
-              style: styles.composerInput,
-              editable: isModelReady,
-              placeholder: isModelReady
-                ? ChatScreenLabels.COMPOSER_PLACEHOLDER
-                : ChatScreenLabels.MODEL_REQUIRED,
-              placeholderTextColor: colors.textSecondary,
-            }}
+            textInputProps={composerTextInputProps}
             keyboardAvoidingViewProps={{
               keyboardVerticalOffset: headerHeight,
             }}
@@ -347,7 +405,12 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   inputToolbarPrimary: {
+    alignItems: "flex-end",
     backgroundColor: colors.background,
+  },
+  composerContainer: {
+    flex: 1,
+    justifyContent: "center",
   },
   composerInput: {
     ...typography.body,
@@ -355,10 +418,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.chipBackground,
     borderRadius: radii.lg,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     marginHorizontal: spacing.sm,
-    lineHeight: 22,
-    flex: 1,
+    lineHeight: COMPOSER_LINE_HEIGHT,
+    textAlignVertical: "center",
   },
   userBubble: {
     backgroundColor: colors.userBubble,
