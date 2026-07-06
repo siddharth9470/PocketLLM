@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect, useState } from "react";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import ModelCard from "../../components/ModelCard";
@@ -16,8 +17,10 @@ const ModelsScreenLabels = {
 
 export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
   const [huggingFaceModels, setHFModels] = useState<HuggingFaceModel[]>([]);
+  const isFocused = useIsFocused();
 
-  const { startDownload, downloadProgress, activeDownloads } = useModelDownloader();
+  const { startDownload, downloadProgress, activeDownloads, downloadedModelIds, syncDownloadedModelIds } =
+    useModelDownloader();
   const { navigation } = props;
 
   const {
@@ -54,6 +57,12 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
     });
   }, []);
 
+  useEffect(() => {
+    if (isFocused) {
+      syncDownloadedModelIds();
+    }
+  }, [isFocused, syncDownloadedModelIds]);
+
   const renderModelCard = useCallback(
     ({ item }: { item: HuggingFaceModel }) => {
       return (
@@ -61,13 +70,14 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
           model={item}
           downloadProgress={downloadProgress[item.id]}
           activeDownload={activeDownloads[item.id]}
+          isDownloaded={downloadedModelIds[item.id] ?? false}
           onClickDownload={(item: HuggingFaceModel) => {
             startDownload(item);
           }}
         />
       );
     },
-    [startDownload, downloadProgress, activeDownloads],
+    [startDownload, downloadProgress, activeDownloads, downloadedModelIds],
   );
 
   return (

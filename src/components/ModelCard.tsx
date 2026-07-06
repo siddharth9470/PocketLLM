@@ -68,9 +68,8 @@ export default function ModelCard(props: ModelCardProps) {
         </>
       ) : (
         <PrimaryButton
-          label={activeDownload ? "Open" : "Download"}
+          label={isDownloaded ? "Open" : "Download"}
           onPress={async () => onClickDownload(model)}
-          loading={activeDownload}
           variant={isDownloaded ? "secondary" : "primary"}
           style={[styles.downloadButton, isDownloaded && styles.completedButton]}
         />
