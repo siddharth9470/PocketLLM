@@ -16,7 +16,14 @@ export default function ChatsStackNavigator() {
       }}
     >
       <Stack.Screen name="ChatList" component={ChatListScreen} />
-      <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => ({ title: route.params.title })} />
+      <Stack.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={({ route }) => ({
+          title: route.params.title,
+          freezeOnBlur: true,
+        })}
+      />
     </Stack.Navigator>
   );
 }
