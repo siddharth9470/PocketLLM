@@ -8,7 +8,7 @@ import {
 } from "llama.rn";
 import { Platform } from "react-native";
 
-import { ChatScreenLabels, DEFAULT_SYSTEM_PROMPT } from "../constants/chat";
+import { ChatScreenLabels, DEFAULT_SYSTEM_PROMPT, MAX_COMPLETION_TOKENS } from "../constants/chat";
 import { getDownloadedModels } from "../db/ModelDB";
 import type { ChatMessage } from "../types/chat";
 import { isLanguageModelGgufFilename } from "../utils/ggufFileSelection";
@@ -25,6 +25,7 @@ const MAX_CONTEXT_MESSAGES = 20;
 
 export interface ChatCompletionResult {
   text: string;
+  truncated?: boolean;
   metrics?: ChatMessage["metrics"];
 }
 
@@ -38,6 +39,20 @@ export type InferenceTokenHandler = (displayText: string) => void;
 function extractStreamingDisplayText(data: TokenData): string {
   const raw = data.content ?? data.accumulated_text ?? "";
   return stripReasoningTagsForStreaming(raw);
+}
+
+function finalizeCompletionText(cleanedText: string, truncated: boolean): string {
+  const trimmed = cleanedText.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  if (!truncated) {
+    return trimmed;
+  }
+
+  const ellipsisSuffix = trimmed.endsWith("…") ? "" : "…";
+  return `${trimmed}${ellipsisSuffix}\n\n${ChatScreenLabels.RESPONSE_TRUNCATED}`;
 }
 
 const STOP_WORDS = [
@@ -246,7 +261,7 @@ export async function runInference(
     const jinjaSupported = await llamaContext.isJinjaSupported();
     const completionParams = {
       messages,
-      n_predict: 256,
+      n_predict: MAX_COMPLETION_TOKENS,
       stop: STOP_WORDS,
       ...(jinjaSupported
         ? {
@@ -273,9 +288,11 @@ export async function runInference(
     const promptTokens = msgResult.tokens_evaluated;
     const tokensPerSecond = timings?.predicted_per_second;
     const cleanedText = sanitizeAssistantResponse(msgResult.text, msgResult.content);
+    const finalText = finalizeCompletionText(cleanedText, msgResult.truncated === true);
 
     return {
-      text: cleanedText,
+      text: finalText,
+      truncated: msgResult.truncated === true,
       metrics: {
         ...(tokensPerSecond !== undefined ? { tokensPerSecond } : {}),
         ...(promptTokens !== undefined ? { promptTokens } : {}),

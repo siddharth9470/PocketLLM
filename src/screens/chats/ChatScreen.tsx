@@ -2,14 +2,19 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Keyboard, Pressable, StyleSheet, Text, View } from "react-native";
-import { Bubble, GiftedChat, type IMessage, Send } from "react-native-gifted-chat";
+import { Bubble, GiftedChat, InputToolbar, type IMessage, Send } from "react-native-gifted-chat";
 
 import ModelPicker from "../../components/ModelPicker";
 import { ChatScreenLabels } from "../../constants/chat";
 import { colors, radii, spacing, typography } from "../../constants/theme";
 import { getDownloadedModelsList } from "../../db/ModelDB";
 import type { ChatsStackScreenProps } from "../../navigation/types";
-import { classifyInferenceError, initializeModel, resolveDownloadedModelPath, releaseModel } from "../../services/chatHelper";
+import {
+  classifyInferenceError,
+  initializeModel,
+  releaseModel,
+  resolveDownloadedModelPath,
+} from "../../services/chatHelper";
 import { useChatStore } from "../../stores/chatStore";
 import type { HuggingFaceModel } from "../../types/models";
 import { generateChatId } from "../../utils/chatIds";
@@ -51,7 +56,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     };
   }, []);
 
-  const headerHeight = useHeaderHeight();
+  const headerHeight = 130;
 
   const refreshReadyModels = useCallback(async () => {
     try {
@@ -111,12 +116,32 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   }, [conversation?.modelId, isChatUiMounted]);
 
   useEffect(() => {
-    if (!isChatUiMounted || isModelReady) {
+    if (!isChatUiMounted) {
+      return;
+    }
+
+    if (isModelReady) {
+      setIsModelPickerVisible(false);
+      return;
+    }
+
+    const assignedModelId = selectedModelId ?? conversation?.modelId;
+    if (assignedModelId) {
+      return;
+    }
+
+    if (isInitialLoad) {
       return;
     }
 
     setIsModelPickerVisible(true);
-  }, [isChatUiMounted, isModelReady]);
+  }, [
+    conversation?.modelId,
+    isChatUiMounted,
+    isInitialLoad,
+    isModelReady,
+    selectedModelId,
+  ]);
 
   useEffect(() => {
     if (!isChatUiMounted || !conversation?.title) {
@@ -126,16 +151,12 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     navigation.setOptions({ title: conversation.title });
   }, [conversation?.title, isChatUiMounted, navigation]);
 
-  const giftedMessages = useMemo(
-    () => toGiftedChatMessages(conversation?.messages ?? []),
-    [conversation?.messages],
-  );
+  const giftedMessages = useMemo(() => toGiftedChatMessages(conversation?.messages ?? []), [conversation?.messages]);
 
   const hasStreamingContent = useMemo(
     () =>
-      conversation?.messages?.some(
-        (message) => message.status === "streaming" && message.content.trim().length > 0,
-      ) ?? false,
+      conversation?.messages?.some((message) => message.status === "streaming" && message.content.trim().length > 0) ??
+      false,
     [conversation?.messages],
   );
 
@@ -153,12 +174,25 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         return;
       }
 
+      Keyboard.dismiss();
+
       void sendMessage(conversationId, text, {
         modelId: selectedModelId,
         onInferenceError: showInferenceError,
       });
     },
     [conversationId, isModelReady, isSending, selectedModelId, sendMessage, showInferenceError],
+  );
+
+  const renderInputToolbar = useCallback(
+    (props: ComponentProps<typeof InputToolbar>) => (
+      <InputToolbar
+        {...props}
+        containerStyle={styles.inputToolbarContainer}
+        primaryStyle={styles.inputToolbarPrimary}
+      />
+    ),
+    [],
   );
 
   const handleSelectModel = useCallback(
@@ -245,9 +279,12 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
             messages={giftedMessages}
             onSend={handleSend}
             user={CHAT_USER}
+            colorScheme="light"
             messageIdGenerator={generateChatId}
             renderBubble={renderBubble}
+            renderInputToolbar={renderInputToolbar}
             renderSend={renderSend}
+            isSendButtonAlwaysVisible
             renderAvatar={() => null}
             isUserAvatarVisible={false}
             isTyping={isSending && !hasStreamingContent}
@@ -305,14 +342,23 @@ const styles = StyleSheet.create({
   messagesContainer: {
     backgroundColor: colors.background,
   },
+  inputToolbarContainer: {
+    backgroundColor: colors.background,
+    borderTopColor: colors.border,
+  },
+  inputToolbarPrimary: {
+    backgroundColor: colors.background,
+  },
   composerInput: {
     ...typography.body,
     color: colors.text,
     backgroundColor: colors.chipBackground,
     borderRadius: radii.lg,
     paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     marginHorizontal: spacing.sm,
     lineHeight: 22,
+    flex: 1,
   },
   userBubble: {
     backgroundColor: colors.userBubble,

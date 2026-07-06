@@ -29,7 +29,6 @@ import {
 import type { ChatMessage, Conversation } from "../types/chat";
 import { deriveConversationTitle, generateChatId } from "../utils/chatIds";
 import { buildConversationPreview } from "../utils/conversationPreview";
-import { sanitizeAssistantResponse } from "../utils/reasoningFilter";
 
 interface SendMessageOptions {
   modelId: string;
@@ -345,12 +344,9 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           });
         };
 
-        let latestStreamContent = "";
         let lastStreamUiFlushAt = 0;
 
         const onToken = (displayText: string): void => {
-          latestStreamContent = displayText;
-
           const now = Date.now();
           if (now - lastStreamUiFlushAt < STREAMING_UI_INTERVAL_MS) {
             return;
@@ -367,14 +363,9 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
         try {
           const completion = await runInference(modelPath, contextMessages, onToken);
-          assistantContent =
-            sanitizeAssistantResponse(completion.text).trim() ||
-            ChatScreenLabels.INFERENCE_FAILED;
+          assistantContent = completion.text.trim() || ChatScreenLabels.INFERENCE_FAILED;
           assistantMetrics = completion.metrics;
-
-          if (latestStreamContent !== assistantContent) {
-            appendStreamingPlaceholder(assistantContent);
-          }
+          appendStreamingPlaceholder(assistantContent);
         } catch (error) {
           const classified = classifyInferenceError(error);
           assistantStatus = "error";
