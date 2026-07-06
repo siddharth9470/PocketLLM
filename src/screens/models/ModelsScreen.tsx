@@ -1,19 +1,38 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
-import { FlatList, StyleSheet, TouchableOpacity, View } from "react-native";
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import ModelCard from "../../components/ModelCard";
-import { colors, spacing } from "../../constants/theme";
+import ModelFilterSortSheet from "../../components/ModelFilterSortSheet";
+import { colors, spacing, typography } from "../../constants/theme";
+import { useModelFilterSort } from "../../hooks/useModelFilterSort";
 import type { ModelsStackScreenProps } from "../../navigation/types";
 import { useModelDownloader } from "../../services/useModelDownloader";
 import type { HuggingFaceModel } from "../../types/models";
 
+const ModelsScreenLabels = {
+  LOADING: "Loading models...",
+  NO_MATCHES: "No models match the current filters.",
+} as const;
+
 export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
   const [huggingFaceModels, setHFModels] = useState<HuggingFaceModel[]>([]);
-  const { startDownload, cancelDownload, downloadProgress, activeDownloads, retreiveCompletedDownloads } =
-    useModelDownloader();
+
+  const { startDownload, downloadProgress, activeDownloads } = useModelDownloader();
   const { navigation } = props;
 
-  // Add header button to navigate to downloaded models screen
+  const {
+    displayedModels,
+    sortBy,
+    selectedAuthor,
+    selectedPipelineTag,
+    uniqueAuthors,
+    uniquePipelineTags,
+    toggleSort,
+    toggleAuthor,
+    togglePipelineTag,
+    hasActiveFilters,
+  } = useModelFilterSort(huggingFaceModels);
+
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -26,7 +45,7 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
 
   useEffect(() => {
     const modelApi =
-      "https://huggingface.co/api/models?search=gguf+q4&limit=20&sort=downloads&direction=-1&expand=pipeline_tag&expand=siblings&expand=tags&expand=likes&expand=private&expand=downloads&expand=createdAt&expand=lastModified&expand=author";
+      "https://huggingface.co/api/models?search=gguf+q4&limit=200&sort=downloads&direction=-1&expand=pipeline_tag&expand=siblings&expand=tags&expand=likes&expand=private&expand=downloads&expand=createdAt&expand=lastModified&expand=author";
 
     fetch(modelApi).then((res) => {
       res.json().then((data) => {
@@ -53,12 +72,29 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
 
   return (
     <View style={styles.container}>
+      <ModelFilterSortSheet
+        sortBy={sortBy}
+        selectedAuthor={selectedAuthor}
+        selectedPipelineTag={selectedPipelineTag}
+        uniqueAuthors={uniqueAuthors}
+        uniquePipelineTags={uniquePipelineTags}
+        hasActiveFilters={hasActiveFilters}
+        onToggleSort={toggleSort}
+        onToggleAuthor={toggleAuthor}
+        onTogglePipelineTag={togglePipelineTag}
+      />
+
       <FlatList
-        data={huggingFaceModels}
+        data={displayedModels}
         keyExtractor={(item) => item._id}
         renderItem={renderModelCard}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>
+            {huggingFaceModels.length === 0 ? ModelsScreenLabels.LOADING : ModelsScreenLabels.NO_MATCHES}
+          </Text>
+        }
       />
     </View>
   );
@@ -73,5 +109,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.xxl,
+  },
+  emptyText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: "center",
+    paddingVertical: spacing.xxl,
   },
 });
