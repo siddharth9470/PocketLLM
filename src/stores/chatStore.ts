@@ -29,6 +29,7 @@ import {
 import type { ChatMessage, Conversation } from "../types/chat";
 import { deriveConversationTitle, generateChatId } from "../utils/chatIds";
 import { buildConversationPreview } from "../utils/conversationPreview";
+import { sanitizeAssistantResponse } from "../utils/reasoningFilter";
 
 interface SendMessageOptions {
   modelId: string;
@@ -295,7 +296,9 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
         try {
           const completion = await runInference(modelPath, contextMessages);
-          assistantContent = completion.text.trim() || ChatScreenLabels.INFERENCE_FAILED;
+          assistantContent =
+            sanitizeAssistantResponse(completion.text).trim() ||
+            ChatScreenLabels.INFERENCE_FAILED;
           assistantMetrics = completion.metrics;
         } catch (error) {
           const classified = classifyInferenceError(error);

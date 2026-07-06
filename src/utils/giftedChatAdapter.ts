@@ -1,6 +1,7 @@
 import type { IMessage, User } from "react-native-gifted-chat";
 
 import type { ChatMessage } from "../types/chat";
+import { stripReasoningTags } from "./reasoningFilter";
 
 export const CHAT_USER: User = {
   _id: "user",
@@ -20,9 +21,14 @@ export function toGiftedChatMessages(messages: ChatMessage[]): IMessage[] {
       const createdAt = new Date(message.createdAt);
       const safeCreatedAt = Number.isNaN(createdAt.getTime()) ? new Date() : createdAt;
 
+      const text =
+        message.role === "assistant"
+          ? stripReasoningTags(message.content)
+          : message.content;
+
       return {
         _id: message.id,
-        text: message.content,
+        text,
         createdAt: safeCreatedAt,
         user: message.role === "user" ? CHAT_USER : CHAT_ASSISTANT,
       };

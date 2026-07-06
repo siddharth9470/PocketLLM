@@ -16,6 +16,6 @@ export const ChatScreenLabels = {
 } as const;
 
 export const DEFAULT_SYSTEM_PROMPT =
-  "This is a conversation between user and assistant, a friendly chatbot.";
+  "You are a helpful assistant in a mobile chat app. Reply with only your final answer to the user. Do not output internal reasoning, thought channels, analysis steps, or markup tags such as channel or think blocks.";
 
 export const CONVERSATION_PREVIEW_MAX_LENGTH = 120;
