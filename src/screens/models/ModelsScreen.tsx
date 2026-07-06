@@ -25,15 +25,9 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
   }, [navigation]);
 
   useEffect(() => {
-    // initializeModel(
-    //     "file:///data/user/0/com.app.pocketllm/files/hyperclovax-seed-text-instruct-1.5b-q4_k_m.gguf"
-    // ).then(() => {
-    //     initiateChat("Hi, how are you?").then((res) => console.log(res));
-    // });
-    // retreiveCompletedDownloads();
     const modelApi =
-      "https://huggingface.co/api/models?search=gguf+q4&limit=2000&sort=downloads&direction=-1&expand=pipeline_tag&expand=siblings&expand=tags&expand=likes&expand=private&expand=downloads&expand=createdAt&expand=lastModified&expand=author";
-    console.log("data");
+      "https://huggingface.co/api/models?search=gguf+q4&limit=20&sort=downloads&direction=-1&expand=pipeline_tag&expand=siblings&expand=tags&expand=likes&expand=private&expand=downloads&expand=createdAt&expand=lastModified&expand=author";
+
     fetch(modelApi).then((res) => {
       res.json().then((data) => {
         setHFModels(data as HuggingFaceModel[]);

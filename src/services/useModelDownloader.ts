@@ -111,7 +111,7 @@ export const useModelDownloader = () => {
   }, [attachTaskListeners]);
 
   const startDownload = async (model: HuggingFaceModel) => {
-    const modelDownloadUrl = await getDownloadUrlForModel(model.id);
+    const modelDownloadUrl = await getDownloadUrlForModel(model);
     if (!modelDownloadUrl) {
       console.error(`Download failed for model: ${model.id}`);
       return null;
@@ -152,6 +152,7 @@ export const useModelDownloader = () => {
     }
 
     setActiveDownloads((prev) => ({ ...prev, [model.id]: true }));
+    setDownloadProgress((prev) => ({ ...prev, [model.id]: 0 }));
 
     // 1. Create a clean base task instance
     const task = createDownloadTask({
