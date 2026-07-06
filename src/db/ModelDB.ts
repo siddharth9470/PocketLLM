@@ -1,9 +1,100 @@
 import { ANDROID_DATABASE_PATH, type DB, IOS_LIBRARY_PATH, open } from "@op-engineering/op-sqlite";
 import { Platform } from "react-native";
 
-import type { HuggingFaceModel } from "../types/models";
+import type { DownloadStatus, HFSibling, HuggingFaceModel, ModelDownloadInfo } from "../types/models";
 
 type DownloadedMap = Record<string, HuggingFaceModel>;
+
+interface DownloadedModelRow {
+  id: string;
+  _id: string | null;
+  name: string | null;
+  likes: number | null;
+  private: number | null;
+  downloads: number | null;
+  tags_json: string | null;
+  author: string | null;
+  library_name: string | null;
+  created_at: string | null;
+  model_id: string | null;
+  pipeline_tag: string | null;
+  siblings_json: string | null;
+  local_file_path: string | null;
+  download_status: string;
+  downloaded_at: number | null;
+}
+
+function boolToSql(value: boolean | undefined): number | null {
+  if (value === undefined) {
+    return null;
+  }
+  return value ? 1 : 0;
+}
+
+function sqlToBool(value: number | null | undefined): boolean {
+  return value === 1;
+}
+
+function parseJsonArray<T>(json: string | null | undefined): T[] {
+  if (!json) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function stringifyArray<T>(arr: T[] | undefined): string | null {
+  if (arr === undefined) {
+    return null;
+  }
+  return JSON.stringify(arr);
+}
+
+function buildDownloadInfo(row: DownloadedModelRow): ModelDownloadInfo | undefined {
+  const status = (row.download_status as DownloadStatus) ?? "idle";
+  const localFilePath = row.local_file_path ?? undefined;
+  const downloadedAt = row.downloaded_at ?? undefined;
+
+  if (status !== "idle" || localFilePath !== undefined || downloadedAt !== undefined) {
+    return {
+      status,
+      ...(localFilePath !== undefined ? { localFilePath } : {}),
+      ...(downloadedAt !== undefined ? { downloadedAt } : {}),
+    };
+  }
+
+  return undefined;
+}
+
+function rowToModel(row: DownloadedModelRow): HuggingFaceModel {
+  const downloadInfo = buildDownloadInfo(row);
+
+  const model: HuggingFaceModel = {
+    _id: row._id ?? "",
+    id: row.id,
+    name: row.name ?? "",
+    likes: row.likes ?? 0,
+    private: sqlToBool(row.private),
+    downloads: row.downloads ?? 0,
+    tags: parseJsonArray<string>(row.tags_json),
+    author: row.author ?? "",
+    library_name: row.library_name ?? "",
+    createdAt: row.created_at ?? "",
+    modelId: row.model_id ?? "",
+    pipeline_tag: row.pipeline_tag ?? "",
+    siblings: parseJsonArray<HFSibling>(row.siblings_json),
+  };
+
+  if (downloadInfo !== undefined) {
+    model.downloadInfo = downloadInfo;
+  }
+
+  return model;
+}
 
 class ModelDatabaseManager {
   private static instance: ModelDatabaseManager | null = null;
@@ -36,7 +127,18 @@ class ModelDatabaseManager {
       this.db.execute(
         `CREATE TABLE IF NOT EXISTS downloaded_models (
           id TEXT PRIMARY KEY NOT NULL,
-          model_json TEXT NOT NULL,
+          _id TEXT,
+          name TEXT,
+          likes INTEGER,
+          private INTEGER,
+          downloads INTEGER,
+          tags_json TEXT,
+          author TEXT,
+          library_name TEXT,
+          created_at TEXT,
+          model_id TEXT,
+          pipeline_tag TEXT,
+          siblings_json TEXT,
           local_file_path TEXT,
           download_status TEXT NOT NULL DEFAULT 'idle',
           downloaded_at INTEGER
@@ -62,16 +164,53 @@ class ModelDatabaseManager {
 
       await connection.execute(
         `INSERT INTO downloaded_models (
-          id, model_json, local_file_path, download_status, downloaded_at
-        ) VALUES (?, ?, ?, ?, ?)
+          id,
+          _id,
+          name,
+          likes,
+          private,
+          downloads,
+          tags_json,
+          author,
+          library_name,
+          created_at,
+          model_id,
+          pipeline_tag,
+          siblings_json,
+          local_file_path,
+          download_status,
+          downloaded_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
-          model_json = excluded.model_json,
+          _id = excluded._id,
+          name = excluded.name,
+          likes = excluded.likes,
+          private = excluded.private,
+          downloads = excluded.downloads,
+          tags_json = excluded.tags_json,
+          author = excluded.author,
+          library_name = excluded.library_name,
+          created_at = excluded.created_at,
+          model_id = excluded.model_id,
+          pipeline_tag = excluded.pipeline_tag,
+          siblings_json = excluded.siblings_json,
           local_file_path = excluded.local_file_path,
           download_status = excluded.download_status,
           downloaded_at = excluded.downloaded_at;`,
         [
           model.id,
-          JSON.stringify(model),
+          model._id ?? null,
+          model.name ?? null,
+          model.likes ?? null,
+          boolToSql(model.private),
+          model.downloads ?? null,
+          stringifyArray(model.tags),
+          model.author ?? null,
+          model.library_name ?? null,
+          model.createdAt ?? null,
+          model.modelId ?? null,
+          model.pipeline_tag ?? null,
+          stringifyArray(model.siblings),
           downloadInfo?.localFilePath ?? null,
           downloadInfo?.status ?? "idle",
           downloadInfo?.downloadedAt ?? null,
@@ -85,11 +224,11 @@ class ModelDatabaseManager {
   public async getDownloadedModels(): Promise<DownloadedMap> {
     try {
       const connection = this.getDatabaseConnection();
-      const result = await connection.execute("SELECT model_json FROM downloaded_models;");
+      const result = await connection.execute("SELECT * FROM downloaded_models;");
       const map: DownloadedMap = {};
 
       for (const row of result.rows) {
-        const model = JSON.parse(row.model_json as string) as HuggingFaceModel;
+        const model = rowToModel(row as unknown as DownloadedModelRow);
         map[model.id] = model;
       }
 
