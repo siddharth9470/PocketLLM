@@ -1,5 +1,12 @@
 import "@testing-library/jest-native/extend-expect";
 
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 jest.mock("@op-engineering/op-sqlite", () => {
   const { mockExecute } = require("./__tests__/testUtils");
   return {

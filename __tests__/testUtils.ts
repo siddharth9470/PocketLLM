@@ -1,8 +1,97 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 
+import { ChatScreenLabels } from "../src/constants/chat";
+import type { Conversation } from "../src/types/chat";
 import type { HuggingFaceModel } from "../src/types/models";
 
 type HuggingFaceModelsQuery = UseQueryResult<HuggingFaceModel[], Error>;
+
+export const MOCK_NEW_CONVERSATION_ID = "conv-new-1";
+
+export type MockChatStore = {
+  conversations: Conversation[];
+  isLoadingConversations: boolean;
+  conversationDetails: Record<string, Conversation>;
+  isSending: boolean;
+  refreshConversations: jest.Mock;
+  loadConversation: jest.Mock;
+  getConversation: jest.Mock;
+  sendMessage: jest.Mock;
+  continueAssistantMessage: jest.Mock;
+  setConversationModel: jest.Mock;
+  setActiveConversationId: jest.Mock;
+  createConversationId: jest.Mock;
+  deleteConversation: jest.Mock;
+};
+
+export function mockChatStore(overrides: Partial<MockChatStore> = {}): MockChatStore {
+  const { useChatStore } = require("../src/stores/chatStore") as typeof import("../src/stores/chatStore");
+
+  const state: MockChatStore = {
+    conversations: [],
+    isLoadingConversations: false,
+    conversationDetails: {},
+    isSending: false,
+    refreshConversations: jest.fn().mockResolvedValue(undefined),
+    loadConversation: jest.fn().mockResolvedValue(null),
+    getConversation: jest.fn(),
+    sendMessage: jest.fn().mockResolvedValue(undefined),
+    continueAssistantMessage: jest.fn().mockResolvedValue(undefined),
+    setConversationModel: jest.fn().mockResolvedValue(undefined),
+    setActiveConversationId: jest.fn(),
+    createConversationId: jest.fn(() => MOCK_NEW_CONVERSATION_ID),
+    deleteConversation: jest.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+
+  if (overrides.getConversation === undefined) {
+    state.getConversation.mockImplementation(
+      (conversationId: string) => state.conversationDetails[conversationId],
+    );
+  }
+
+  jest.mocked(useChatStore).mockImplementation((selector) => selector(state));
+  return state;
+}
+
+export function restoreRealChatStore(): void {
+  const { useChatStore } = require("../src/stores/chatStore") as typeof import("../src/stores/chatStore");
+  const actual = jest.requireActual("../src/stores/chatStore") as typeof import("../src/stores/chatStore");
+  jest.mocked(useChatStore).mockImplementation(actual.useChatStore);
+}
+
+export function buildMockConversations(model: HuggingFaceModel = buildCompletedModel()): Conversation[] {
+  return [
+    {
+      id: "conv-history-1",
+      title: "Gemma chat",
+      preview: "Hello there",
+      modelId: model.id,
+      createdAt: "2024-06-01T10:00:00.000Z",
+      updatedAt: "2024-06-01T11:00:00.000Z",
+    },
+    {
+      id: "conv-history-2",
+      title: "Quick test",
+      preview: "How are you?",
+      modelId: model.id,
+      createdAt: "2024-06-02T09:00:00.000Z",
+      updatedAt: "2024-06-02T09:30:00.000Z",
+    },
+  ];
+}
+
+export function buildReadyConversation(model: HuggingFaceModel = buildCompletedModel()): Conversation {
+  return {
+    id: MOCK_NEW_CONVERSATION_ID,
+    title: ChatScreenLabels.NEW_CHAT_TITLE,
+    preview: "",
+    modelId: model.id,
+    createdAt: "2024-06-01T10:00:00.000Z",
+    updatedAt: "2024-06-01T10:00:00.000Z",
+    messages: [],
+  };
+}
 
 export function buildHuggingFaceModelsQuery(
   overrides: Partial<Pick<HuggingFaceModelsQuery, "data" | "isLoading" | "error" | "isRefetching">> = {},
