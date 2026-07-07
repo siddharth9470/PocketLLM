@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { ModelsScreenLabels } from "../constants/models";
 import { colors, radii, spacing, typography } from "../constants/theme";
 import type { HuggingFaceModel } from "../types/models";
 import { formatCount, parseModelId } from "../utils/parseModelId";
@@ -12,6 +13,7 @@ interface ModelCardProps {
   downloadProgress: number;
   activeDownload: boolean;
   onClickDownload: (item: HuggingFaceModel) => void;
+  onStopDownload?: (item: HuggingFaceModel) => void;
   isDownloaded?: boolean;
   isDownloading?: boolean;
   progress?: number;
@@ -21,6 +23,7 @@ export default function ModelCard(props: ModelCardProps) {
   const {
     model,
     onClickDownload,
+    onStopDownload,
     downloadProgress,
     activeDownload,
     isDownloaded = false,
@@ -62,9 +65,19 @@ export default function ModelCard(props: ModelCardProps) {
       {downloading ? (
         <>
           <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${currentProgress}%` }]} />
+            <View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, currentProgress ?? 0))}%` }]} />
           </View>
-          <Text style={styles.progressText}>Downloading {Math.round(currentProgress)}%</Text>
+          <Text style={styles.progressText}>Downloading {Math.round(currentProgress ?? 0)}%</Text>
+          {onStopDownload ? (
+            <Pressable
+              style={styles.stopButton}
+              onPress={() => onStopDownload(model)}
+              accessibilityRole="button"
+              accessibilityLabel={ModelsScreenLabels.STOP_DOWNLOADING_ACCESSIBILITY}
+            >
+              <Text style={styles.stopButtonText}>{ModelsScreenLabels.STOP_DOWNLOADING}</Text>
+            </Pressable>
+          ) : null}
         </>
       ) : (
         <PrimaryButton
@@ -137,6 +150,22 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.md,
     alignSelf: "center",
+  },
+  stopButton: {
+    minHeight: 44,
+    borderRadius: radii.md,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  stopButtonText: {
+    ...typography.headline,
+    fontSize: 15,
+    color: colors.danger,
   },
   downloadButton: {
     backgroundColor: colors.primary,

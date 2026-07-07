@@ -237,17 +237,36 @@ export const useModelDownloader = () => {
     }
   };
 
-  const cancelDownload = (modelId: string) => {
+  const cancelDownload = useCallback(async (modelId: string) => {
     const task = activeTasksRef.current[modelId];
     if (task) {
       task.stop();
       delete activeTasksRef.current[modelId];
-
-      setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
-      setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
-      console.log(`Canceled download for: ${modelId}`);
     }
-  };
+
+    setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+    setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
+
+    try {
+      const current = await getDownloadedModels();
+      const existingModel = current[modelId];
+      if (existingModel?.downloadInfo?.status === "pending" || existingModel?.downloadInfo?.status === "downloading") {
+        await saveDownloadedModel({
+          ...existingModel,
+          downloadInfo: {
+            ...(existingModel.downloadInfo ?? {}),
+            status: "idle",
+            downloadedAt: undefined,
+          },
+        });
+      }
+    } catch (error) {
+      console.error(`Failed to reset download metadata for ${modelId}:`, error);
+    }
+
+    completeHandler(modelId);
+    console.log(`Canceled download for: ${modelId}`);
+  }, []);
 
   const retreiveCompletedDownloads = async () => {
     /**

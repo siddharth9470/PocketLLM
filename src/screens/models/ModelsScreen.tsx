@@ -4,22 +4,18 @@ import { useCallback, useEffect, useState } from "react";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import ModelCard from "../../components/ModelCard";
 import ModelFilterSortSheet from "../../components/ModelFilterSortSheet";
+import { ModelsScreenLabels } from "../../constants/models";
 import { colors, spacing, typography } from "../../constants/theme";
 import { useModelFilterSort } from "../../hooks/useModelFilterSort";
 import type { ModelsStackScreenProps } from "../../navigation/types";
 import { useModelDownloader } from "../../services/useModelDownloader";
 import type { HuggingFaceModel } from "../../types/models";
 
-const ModelsScreenLabels = {
-  LOADING: "Loading models...",
-  NO_MATCHES: "No models match the current filters.",
-} as const;
-
 export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
   const [huggingFaceModels, setHFModels] = useState<HuggingFaceModel[]>([]);
   const isFocused = useIsFocused();
 
-  const { startDownload, downloadProgress, activeDownloads, downloadedModelIds, syncDownloadedModelIds } =
+  const { startDownload, cancelDownload, downloadProgress, activeDownloads, downloadedModelIds, syncDownloadedModelIds } =
     useModelDownloader();
   const { navigation } = props;
 
@@ -63,21 +59,27 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
     }
   }, [isFocused, syncDownloadedModelIds]);
 
+  const handleStopDownload = useCallback(
+    (model: HuggingFaceModel) => {
+      cancelDownload(model.id);
+    },
+    [cancelDownload],
+  );
+
   const renderModelCard = useCallback(
     ({ item }: { item: HuggingFaceModel }) => {
       return (
         <ModelCard
           model={item}
-          downloadProgress={downloadProgress[item.id]}
-          activeDownload={activeDownloads[item.id]}
+          downloadProgress={downloadProgress[item.id] ?? 0}
+          activeDownload={activeDownloads[item.id] ?? false}
           isDownloaded={downloadedModelIds[item.id] ?? false}
-          onClickDownload={(item: HuggingFaceModel) => {
-            startDownload(item);
-          }}
+          onClickDownload={startDownload}
+          onStopDownload={handleStopDownload}
         />
       );
     },
-    [startDownload, downloadProgress, activeDownloads, downloadedModelIds],
+    [startDownload, handleStopDownload, downloadProgress, activeDownloads, downloadedModelIds],
   );
 
   return (
