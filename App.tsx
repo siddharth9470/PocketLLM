@@ -1,4 +1,5 @@
 import { NavigationContainer } from "@react-navigation/native";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
@@ -6,6 +7,15 @@ import { initializeAllDatabases } from "./src/db";
 import CentralNavigator from "./src/navigation/CentralNavigator";
 import { ChatStoreProvider } from "./src/stores/chatStore";
 ///import { DownloadStoreProvider } from "./src/stores/downloadStore";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 15,
+    },
+  },
+});
 
 export default function App() {
   const [isDbReady, setIsDbReady] = useState(false);
@@ -27,14 +37,16 @@ export default function App() {
   }
 
   return (
-    <ChatStoreProvider>
-      {/* <DownloadStoreProvider> */}
-      <NavigationContainer>
-        <CentralNavigator />
-        <StatusBar style="auto" />
-      </NavigationContainer>
-      {/* </DownloadStoreProvider> */}
-    </ChatStoreProvider>
+    <QueryClientProvider client={queryClient}>
+      <ChatStoreProvider>
+        {/* <DownloadStoreProvider> */}
+        <NavigationContainer>
+          <CentralNavigator />
+          <StatusBar style="auto" />
+        </NavigationContainer>
+        {/* </DownloadStoreProvider> */}
+      </ChatStoreProvider>
+    </QueryClientProvider>
   );
 }
 

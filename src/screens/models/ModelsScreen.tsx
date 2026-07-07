@@ -1,23 +1,26 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
-import { useCallback, useEffect, useState } from "react";
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useCallback, useEffect } from "react";
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+
 import ModelCard from "../../components/ModelCard";
 import ModelFilterSortSheet from "../../components/ModelFilterSortSheet";
 import { ModelsScreenLabels } from "../../constants/models";
-import { colors, spacing, typography } from "../../constants/theme";
+import { colors, radii, spacing, typography } from "../../constants/theme";
+import { useHuggingFaceModels } from "../../hooks/useHuggingFaceModels";
 import { useModelFilterSort } from "../../hooks/useModelFilterSort";
 import type { ModelsStackScreenProps } from "../../navigation/types";
 import { useModelDownloader } from "../../services/useModelDownloader";
 import type { HuggingFaceModel } from "../../types/models";
 
 export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
-  const [huggingFaceModels, setHFModels] = useState<HuggingFaceModel[]>([]);
   const isFocused = useIsFocused();
+  const { navigation } = props;
+
+  const { data: models = [], isLoading, error, refetch, isRefetching } = useHuggingFaceModels();
 
   const { startDownload, cancelDownload, downloadProgress, activeDownloads, downloadedModelIds, syncDownloadedModelIds } =
     useModelDownloader();
-  const { navigation } = props;
 
   const {
     displayedModels,
@@ -30,7 +33,7 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
     toggleAuthor,
     togglePipelineTag,
     hasActiveFilters,
-  } = useModelFilterSort(huggingFaceModels);
+  } = useModelFilterSort(models);
 
   useEffect(() => {
     navigation.setOptions({
@@ -41,17 +44,6 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
       ),
     });
   }, [navigation]);
-
-  useEffect(() => {
-    const modelApi =
-      "https://huggingface.co/api/models?search=gguf+q4&limit=200&sort=downloads&direction=-1&expand=pipeline_tag&expand=siblings&expand=tags&expand=likes&expand=private&expand=downloads&expand=createdAt&expand=lastModified&expand=author";
-
-    fetch(modelApi).then((res) => {
-      res.json().then((data) => {
-        setHFModels(data as HuggingFaceModel[]);
-      });
-    });
-  }, []);
 
   useEffect(() => {
     if (isFocused) {
@@ -82,8 +74,23 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
     [startDownload, handleStopDownload, downloadProgress, activeDownloads, downloadedModelIds],
   );
 
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>{ModelsScreenLabels.LOADING}</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
+      {error ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{ModelsScreenLabels.FETCH_ERROR}</Text>
+        </View>
+      ) : null}
+
       <ModelFilterSortSheet
         sortBy={sortBy}
         selectedAuthor={selectedAuthor}
@@ -102,9 +109,13 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
         renderItem={renderModelCard}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshing={isRefetching}
+        onRefresh={() => {
+          void refetch();
+        }}
         ListEmptyComponent={
           <Text style={styles.emptyText}>
-            {huggingFaceModels.length === 0 ? ModelsScreenLabels.LOADING : ModelsScreenLabels.NO_MATCHES}
+            {models.length === 0 ? ModelsScreenLabels.LOADING : ModelsScreenLabels.NO_MATCHES}
           </Text>
         }
       />
@@ -116,6 +127,31 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.background,
+    gap: spacing.md,
+  },
+  loadingText: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+  errorBanner: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    backgroundColor: colors.chipBackground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.danger,
+  },
+  errorText: {
+    ...typography.body,
+    color: colors.danger,
+    textAlign: "center",
   },
   listContent: {
     paddingHorizontal: spacing.lg,
