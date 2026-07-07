@@ -29,7 +29,12 @@ import { useChatStore } from "../../stores/chatStore";
 import type { HuggingFaceModel } from "../../types/models";
 import { generateChatId } from "../../utils/chatIds";
 import { isLanguageModelGgufFilename } from "../../utils/ggufFileSelection";
-import { CHAT_USER, toGiftedChatMessages } from "../../utils/giftedChatAdapter";
+import {
+  CHAT_ASSISTANT,
+  CHAT_USER,
+  type PocketChatMessage,
+  toGiftedChatMessages,
+} from "../../utils/giftedChatAdapter";
 
 const COMPOSER_LINE_HEIGHT = 22;
 const COMPOSER_VERTICAL_PADDING = spacing.sm * 2;
@@ -95,6 +100,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   const conversation = useChatStore((state) => state.conversationDetails[conversationId]);
   const loadConversation = useChatStore((state) => state.loadConversation);
   const sendMessage = useChatStore((state) => state.sendMessage);
+  const continueAssistantMessage = useChatStore((state) => state.continueAssistantMessage);
   const setConversationModel = useChatStore((state) => state.setConversationModel);
   const setActiveConversationId = useChatStore((state) => state.setActiveConversationId);
   const isSending = useChatStore((state) => state.isSending);
@@ -293,21 +299,62 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     [isModelReady],
   );
 
+  const handleContinueResponse = useCallback(
+    (messageId: string) => {
+      if (isSending || !isModelReady || !selectedModelId) {
+        return;
+      }
+
+      void continueAssistantMessage(conversationId, messageId, {
+        modelId: selectedModelId,
+        onInferenceError: showInferenceError,
+      });
+    },
+    [
+      continueAssistantMessage,
+      conversationId,
+      isModelReady,
+      isSending,
+      selectedModelId,
+      showInferenceError,
+    ],
+  );
+
   const renderBubble = useCallback(
-    (props: ComponentProps<typeof Bubble>) => (
-      <Bubble
-        {...props}
-        wrapperStyle={{
-          left: styles.assistantBubble,
-          right: styles.userBubble,
-        }}
-        textStyle={{
-          left: styles.assistantText,
-          right: styles.userText,
-        }}
-      />
-    ),
-    [],
+    (props: ComponentProps<typeof Bubble>) => {
+      const currentMessage = props.currentMessage as PocketChatMessage | undefined;
+      const showContinue =
+        currentMessage?.truncated === true &&
+        currentMessage.user._id === CHAT_ASSISTANT._id &&
+        !isSending;
+
+      return (
+        <View style={styles.bubbleContainer}>
+          <Bubble
+            {...props}
+            wrapperStyle={{
+              left: styles.assistantBubble,
+              right: styles.userBubble,
+            }}
+            textStyle={{
+              left: styles.assistantText,
+              right: styles.userText,
+            }}
+          />
+          {showContinue ? (
+            <Pressable
+              style={styles.continueButton}
+              onPress={() => handleContinueResponse(String(currentMessage._id))}
+              accessibilityRole="button"
+              accessibilityLabel={ChatScreenLabels.CONTINUE_RESPONSE_ACCESSIBILITY}
+            >
+              <Text style={styles.continueButtonText}>{ChatScreenLabels.CONTINUE_RESPONSE}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      );
+    },
+    [handleContinueResponse, isSending],
   );
 
   if (isInitialLoad && conversation === undefined) {
@@ -439,5 +486,26 @@ const styles = StyleSheet.create({
   assistantText: {
     ...typography.body,
     color: colors.assistantText,
+  },
+  bubbleContainer: {
+    maxWidth: "100%",
+  },
+  continueButton: {
+    alignSelf: "flex-start",
+    marginTop: spacing.xs,
+    marginLeft: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+    backgroundColor: colors.chipBackground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primary,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  continueButtonText: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: "600",
   },
 });

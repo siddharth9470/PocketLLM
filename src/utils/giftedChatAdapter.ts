@@ -13,7 +13,11 @@ export const CHAT_ASSISTANT: User = {
   name: "Assistant",
 };
 
-export function toGiftedChatMessages(messages: ChatMessage[]): IMessage[] {
+export interface PocketChatMessage extends IMessage {
+  truncated?: boolean;
+}
+
+export function toGiftedChatMessages(messages: ChatMessage[]): PocketChatMessage[] {
   return [...messages]
     .filter((message) => {
       if (message.role !== "user" && message.role !== "assistant") {
@@ -43,6 +47,14 @@ export function toGiftedChatMessages(messages: ChatMessage[]): IMessage[] {
         text,
         createdAt: safeCreatedAt,
         user: message.role === "user" ? CHAT_USER : CHAT_ASSISTANT,
+        truncated: message.truncated === true,
       };
     });
+}
+
+export function findChatMessageByGiftedId(
+  messages: ChatMessage[] | undefined,
+  giftedMessageId: string | number,
+): ChatMessage | undefined {
+  return messages?.find((message) => message.id === String(giftedMessageId));
 }

@@ -20,16 +20,19 @@ import {
   getConversations,
   getMessagesByConversationId,
   updateConversation,
+  updateMessage,
 } from "../db/ChatDB";
 import {
   buildChatContextFromHistory,
   classifyInferenceError,
   resolveDownloadedModelPath,
+  runContinueInference,
   runInference,
 } from "../services/chatHelper";
 import type { ChatMessage, Conversation } from "../types/chat";
 import { deriveConversationTitle, generateChatId } from "../utils/chatIds";
 import { buildConversationPreview } from "../utils/conversationPreview";
+import { stripReasoningTags } from "../utils/reasoningFilter";
 
 interface SendMessageOptions {
   modelId: string;
@@ -48,6 +51,11 @@ interface ChatStore {
   setActiveConversationId: (conversationId: string | null) => void;
   setConversationModel: (conversationId: string, modelId: string) => Promise<void>;
   deleteConversation: (conversationId: string) => Promise<void>;
+  continueAssistantMessage: (
+    conversationId: string,
+    messageId: string,
+    options: SendMessageOptions,
+  ) => Promise<void>;
   sendMessage: (conversationId: string, content: string, options: SendMessageOptions) => Promise<void>;
 }
 
@@ -73,6 +81,7 @@ function buildAssistantMessage(
   metrics?: ChatMessage["metrics"],
   error?: string,
   id?: string,
+  truncated?: boolean,
 ): ChatMessage {
   return {
     id: id ?? generateChatId(),
@@ -81,9 +90,25 @@ function buildAssistantMessage(
     content,
     status,
     createdAt: new Date().toISOString(),
+    ...(truncated ? { truncated: true } : {}),
     ...(metrics ? { metrics } : {}),
     ...(error ? { error } : {}),
   };
+}
+
+function mergeAssistantContinuation(baseText: string, continuationText: string): string {
+  const base = stripReasoningTags(baseText).trimEnd();
+  const extra = stripReasoningTags(continuationText).trim();
+
+  if (!extra) {
+    return base;
+  }
+
+  if (extra.startsWith(base)) {
+    return extra;
+  }
+
+  return `${base}${base.length > 0 ? " " : ""}${extra}`.trim();
 }
 
 function buildNewChatPlaceholder(conversationId: string): Conversation {
@@ -362,11 +387,13 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         let assistantStatus: ChatMessage["status"] = "completed";
         let assistantError: string | undefined;
         let assistantMetrics: ChatMessage["metrics"] | undefined;
+        let assistantTruncated = false;
 
         try {
           const completion = await runInference(modelPath, contextMessages, onToken);
           assistantContent = completion.text.trim() || ChatScreenLabels.INFERENCE_FAILED;
           assistantMetrics = completion.metrics;
+          assistantTruncated = completion.truncated === true;
           appendStreamingPlaceholder(assistantContent);
         } catch (error) {
           const classified = classifyInferenceError(error);
@@ -384,6 +411,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           assistantMetrics,
           assistantError,
           assistantMessageId,
+          assistantTruncated,
         );
 
         await createMessage(assistantMessage);
@@ -442,6 +470,156 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
     [isConversationFocused, refreshConversations],
   );
 
+  const continueAssistantMessage = useCallback(
+    async (conversationId: string, messageId: string, options: SendMessageOptions) => {
+      const modelPath = await resolveDownloadedModelPath(options.modelId);
+      if (!modelPath) {
+        options.onInferenceError?.(ChatScreenLabels.MODEL_UNAVAILABLE);
+        return;
+      }
+
+      setIsSending(true);
+
+      try {
+        const history = await getMessagesByConversationId(conversationId);
+        const existingMessage = history.find((message) => message.id === messageId);
+
+        if (!existingMessage || existingMessage.role !== "assistant") {
+          options.onInferenceError?.(ChatScreenLabels.CONTINUE_RESPONSE_FAILED);
+          return;
+        }
+
+        const appendStreamingUpdate = (content: string, status: ChatMessage["status"] = "streaming"): void => {
+          if (!isConversationFocused(conversationId)) {
+            return;
+          }
+
+          setConversationDetails((prev) => {
+            const current = prev[conversationId];
+            if (!current) {
+              return prev;
+            }
+
+            const messages = current.messages ?? [];
+            const existingIndex = messages.findIndex((message) => message.id === messageId);
+            if (existingIndex === -1) {
+              return prev;
+            }
+
+            const updatedMessages = [...messages];
+            updatedMessages[existingIndex] = {
+              ...updatedMessages[existingIndex],
+              content,
+              status,
+              truncated: status === "streaming" ? true : updatedMessages[existingIndex].truncated,
+            };
+
+            return {
+              ...prev,
+              [conversationId]: {
+                ...current,
+                messages: updatedMessages,
+              },
+            };
+          });
+        };
+
+        let lastStreamUiFlushAt = 0;
+        const onToken = (displayText: string): void => {
+          const now = Date.now();
+          if (now - lastStreamUiFlushAt < STREAMING_UI_INTERVAL_MS) {
+            return;
+          }
+
+          lastStreamUiFlushAt = now;
+          appendStreamingUpdate(mergeAssistantContinuation(existingMessage.content, displayText));
+        };
+
+        appendStreamingUpdate(existingMessage.content, "streaming");
+
+        let mergedContent = existingMessage.content;
+        let mergedMetrics = existingMessage.metrics;
+        let stillTruncated = false;
+
+        try {
+          const completion = await runContinueInference(
+            modelPath,
+            history,
+            messageId,
+            existingMessage.content,
+            onToken,
+          );
+
+          mergedContent = mergeAssistantContinuation(existingMessage.content, completion.text);
+          mergedMetrics = completion.metrics ?? mergedMetrics;
+          stillTruncated = completion.truncated === true;
+        } catch (error) {
+          const classified = classifyInferenceError(error);
+          console.error("Assistant continuation failed:", error);
+          options.onInferenceError?.(classified.userMessage);
+          return;
+        }
+
+        const updatedMessage: ChatMessage = {
+          ...existingMessage,
+          content: mergedContent,
+          status: "completed",
+          truncated: stillTruncated,
+          metrics: mergedMetrics,
+        };
+
+        await updateMessage(messageId, {
+          content: mergedContent,
+          status: "completed",
+          truncated: stillTruncated,
+          metrics: mergedMetrics,
+        });
+
+        const responseTimestamp = new Date().toISOString();
+        await updateConversation(conversationId, {
+          preview: buildConversationPreview(mergedContent),
+          updatedAt: responseTimestamp,
+        });
+
+        if (isConversationFocused(conversationId)) {
+          setConversationDetails((prev) => {
+            const current = prev[conversationId];
+            if (!current) {
+              return prev;
+            }
+
+            const messages = current.messages ?? [];
+            const existingIndex = messages.findIndex((message) => message.id === messageId);
+            if (existingIndex === -1) {
+              return prev;
+            }
+
+            const updatedMessages = [...messages];
+            updatedMessages[existingIndex] = updatedMessage;
+
+            return {
+              ...prev,
+              [conversationId]: {
+                ...current,
+                preview: buildConversationPreview(mergedContent),
+                updatedAt: responseTimestamp,
+                messages: updatedMessages,
+              },
+            };
+          });
+        }
+
+        await refreshConversations();
+      } catch (error) {
+        console.error("Failed to continue assistant message:", error);
+        options.onInferenceError?.(ChatScreenLabels.CONTINUE_RESPONSE_FAILED);
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [isConversationFocused, refreshConversations],
+  );
+
   const deleteConversationById = useCallback(async (conversationId: string): Promise<void> => {
     await deleteConversation(conversationId);
 
@@ -469,6 +647,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       setActiveConversationId,
       setConversationModel,
       deleteConversation: deleteConversationById,
+      continueAssistantMessage,
       sendMessage,
     }),
     [
@@ -482,6 +661,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       setActiveConversationId,
       setConversationModel,
       deleteConversationById,
+      continueAssistantMessage,
       sendMessage,
     ],
   );

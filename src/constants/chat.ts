@@ -20,11 +20,25 @@ export const ChatScreenLabels = {
   INFERENCE_CONTEXT_LIMIT: "The conversation exceeded the model context window. Start a new chat.",
   INFERENCE_ERROR_TITLE: "Generation Failed",
   RESPONSE_TRUNCATED: "(Response shortened — generation limit reached.)",
+  CONTINUE_RESPONSE: "Continue",
+  CONTINUE_RESPONSE_ACCESSIBILITY: "Continue generating response",
+  CONTINUE_RESPONSE_FAILED: "Could not continue this response. Please try again.",
 } as const;
 
 export const MAX_COMPLETION_TOKENS = 4096;
 
+export const CONTEXT_WINDOW_TOKENS_ANDROID = 4096;
+export const CONTEXT_WINDOW_TOKENS_IOS = 8192;
+
+/** Reserved headroom so prompt + completion never exceeds n_ctx. */
+export const GENERATION_TOKEN_BUFFER = 128;
+
+export const MIN_COMPLETION_TOKENS = 256;
+
+export const CONTINUE_USER_PROMPT =
+  "Continue your previous response exactly where you stopped. Do not repeat earlier text. Finish the final sentence.";
+
 export const DEFAULT_SYSTEM_PROMPT =
-  "You are a helpful assistant in a mobile chat app. Reply with only your final answer to the user. Do not output internal reasoning, thought channels, analysis steps, or markup tags such as channel or think blocks.";
+  "You are a helpful assistant in a mobile chat app. Reply with only your final answer to the user. Do not output internal reasoning, thought channels, analysis steps, or markup tags such as channel or think blocks. Provide concise, complete answers. If a response is likely to be long, prioritize finishing the final sentence before the token limit is reached.";
 
 export const CONVERSATION_PREVIEW_MAX_LENGTH = 120;

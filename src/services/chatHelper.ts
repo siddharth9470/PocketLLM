@@ -3,15 +3,26 @@ import {
   type ContextParams,
   initLlama,
   type LlamaContext,
+  type NativeCompletionResult,
   type RNLlamaOAICompatibleMessage,
   type TokenData,
 } from "llama.rn";
 import { Platform } from "react-native";
 
-import { ChatScreenLabels, DEFAULT_SYSTEM_PROMPT, MAX_COMPLETION_TOKENS } from "../constants/chat";
+import {
+  ChatScreenLabels,
+  CONTEXT_WINDOW_TOKENS_ANDROID,
+  CONTEXT_WINDOW_TOKENS_IOS,
+  CONTINUE_USER_PROMPT,
+  DEFAULT_SYSTEM_PROMPT,
+  GENERATION_TOKEN_BUFFER,
+  MAX_COMPLETION_TOKENS,
+  MIN_COMPLETION_TOKENS,
+} from "../constants/chat";
 import { getDownloadedModels } from "../db/ModelDB";
 import type { ChatMessage } from "../types/chat";
 import { isLanguageModelGgufFilename } from "../utils/ggufFileSelection";
+import { buildStopSequences } from "../utils/inferenceStopTokens";
 import {
   sanitizeAssistantResponse,
   stripReasoningTags,
@@ -22,6 +33,19 @@ let llamaContext: LlamaContext | null = null;
 let loadedModelPath: string | null = null;
 
 const MAX_CONTEXT_MESSAGES = 20;
+
+const JINJA_CHAT_FORMAT_OPTIONS = {
+  jinja: true,
+  enable_thinking: false,
+  reasoning_format: "none" as const,
+  chat_template_kwargs: { enable_thinking: false },
+};
+
+const SAMPLING_PENALTIES = {
+  penalty_repeat: 1.08,
+  penalty_freq: 0.05,
+  penalty_last_n: 128,
+};
 
 export interface ChatCompletionResult {
   text: string;
@@ -36,39 +60,22 @@ export interface InferenceErrorInfo {
 
 export type InferenceTokenHandler = (displayText: string) => void;
 
+function getContextWindowSize(): number {
+  return Platform.OS === "android" ? CONTEXT_WINDOW_TOKENS_ANDROID : CONTEXT_WINDOW_TOKENS_IOS;
+}
+
 function extractStreamingDisplayText(data: TokenData): string {
   const raw = data.content ?? data.accumulated_text ?? "";
   return stripReasoningTagsForStreaming(raw);
 }
 
-function finalizeCompletionText(cleanedText: string, truncated: boolean): string {
-  const trimmed = cleanedText.trim();
-  if (!trimmed) {
-    return trimmed;
-  }
-
-  if (!truncated) {
-    return trimmed;
-  }
-
-  const ellipsisSuffix = trimmed.endsWith("…") ? "" : "…";
-  return `${trimmed}${ellipsisSuffix}\n\n${ChatScreenLabels.RESPONSE_TRUNCATED}`;
+function isCompletionTruncated(result: NativeCompletionResult): boolean {
+  return result.truncated === true || result.stopped_limit > 0 || result.context_full === true;
 }
 
-const STOP_WORDS = [
-  "</s>",
-  "<|end|>",
-  "<|eot_id|>",
-  "<|end_of_text|>",
-  "<|im_end|>",
-  "<|user|>",
-  "\n<|user|>",
-  "User:",
-  "<|EOT|>",
-  "<|END_OF_TURN_TOKEN|>",
-  "<|end_of_turn|>",
-  "<|endoftext|>",
-];
+function finalizeCompletionText(cleanedText: string): string {
+  return cleanedText.trim();
+}
 
 export function normalizeModelPath(modelPath: string): string {
   const trimmed = modelPath.trim();
@@ -99,10 +106,42 @@ function buildLlamaContextParams(modelPath: string): ContextParams {
     model: toNativeModelPath(modelPath),
     use_mlock: false,
     use_mmap: true,
-    n_ctx: Platform.OS === "android" ? 1024 : 2048,
+    n_ctx: getContextWindowSize(),
     n_gpu_layers: Platform.OS === "ios" ? 99 : 0,
     n_threads: Platform.OS === "android" ? 4 : undefined,
   };
+}
+
+async function resolveGenerationBudget(
+  context: LlamaContext,
+  messages: RNLlamaOAICompatibleMessage[],
+  jinjaSupported: boolean,
+): Promise<number> {
+  const contextWindow = getContextWindowSize();
+  let promptTokens = Math.floor(contextWindow * 0.45);
+
+  try {
+    if (jinjaSupported) {
+      const formatted = await context.getFormattedChat(messages, null, JINJA_CHAT_FORMAT_OPTIONS);
+
+      if (formatted.type === "jinja" && formatted.prompt) {
+        const tokenized = await context.tokenize(formatted.prompt);
+        promptTokens = tokenized.tokens.length;
+      }
+    } else {
+      const serialized = messages
+        .map((message) => (typeof message.content === "string" ? message.content : ""))
+        .join("\n");
+      const tokenized = await context.tokenize(serialized);
+      promptTokens = tokenized.tokens.length;
+    }
+  } catch (error) {
+    console.warn("Failed to measure prompt tokens; using conservative generation budget.", error);
+  }
+
+  const availableTokens = contextWindow - promptTokens - GENERATION_TOKEN_BUFFER;
+
+  return Math.min(MAX_COMPLETION_TOKENS, Math.max(MIN_COMPLETION_TOKENS, availableTokens));
 }
 
 export async function resolveDownloadedModelPath(modelId: string): Promise<string | null> {
@@ -143,6 +182,10 @@ export function buildChatContextFromHistory(
       return false;
     }
 
+    if (message.status === "streaming" || message.status === "pending") {
+      return false;
+    }
+
     if (message.status === "error" && message.content.trim().length === 0) {
       return false;
     }
@@ -166,6 +209,24 @@ export function buildChatContextFromHistory(
   }
 
   return context;
+}
+
+export function buildContinuationContext(
+  messages: ChatMessage[],
+  assistantMessageId: string,
+  partialAssistantContent: string,
+): RNLlamaOAICompatibleMessage[] {
+  const assistantIndex = messages.findIndex((message) => message.id === assistantMessageId);
+  const priorMessages = assistantIndex >= 0 ? messages.slice(0, assistantIndex) : messages;
+
+  const baseContext = buildChatContextFromHistory(priorMessages);
+  const cleanedPartial = stripReasoningTags(partialAssistantContent);
+
+  return [
+    ...baseContext,
+    { role: "assistant", content: cleanedPartial },
+    { role: "user", content: CONTINUE_USER_PROMPT },
+  ];
 }
 
 export function classifyInferenceError(error: unknown): InferenceErrorInfo {
@@ -244,7 +305,7 @@ export async function initializeModel(modelPath: string): Promise<void> {
   }
 }
 
-export async function runInference(
+async function executeCompletion(
   modelPath: string,
   messages: RNLlamaOAICompatibleMessage[],
   onToken?: InferenceTokenHandler,
@@ -255,53 +316,71 @@ export async function runInference(
     throw new Error("Llama context is not initialized.");
   }
 
+  await llamaContext.clearCache(false);
+
+  const jinjaSupported = await llamaContext.isJinjaSupported();
+  const nPredict = await resolveGenerationBudget(llamaContext, messages, jinjaSupported);
+  const stopSequences = buildStopSequences(modelPath, jinjaSupported);
+
+  const completionParams = {
+    messages,
+    n_predict: nPredict,
+    stop: stopSequences,
+    ...SAMPLING_PENALTIES,
+    ...(jinjaSupported ? JINJA_CHAT_FORMAT_OPTIONS : {}),
+  };
+
+  const msgResult = await llamaContext.completion(
+    completionParams,
+    onToken
+      ? (data: TokenData) => {
+          onToken(extractStreamingDisplayText(data));
+        }
+      : undefined,
+  );
+
+  const timings = msgResult.timings;
+  const cleanedText = sanitizeAssistantResponse(msgResult.text, msgResult.content);
+  const truncated = isCompletionTruncated(msgResult);
+
+  return {
+    text: finalizeCompletionText(cleanedText),
+    truncated,
+    metrics: {
+      ...(timings?.predicted_per_second !== undefined ? { tokensPerSecond: timings.predicted_per_second } : {}),
+      ...(msgResult.tokens_evaluated !== undefined ? { promptTokens: msgResult.tokens_evaluated } : {}),
+      ...(msgResult.tokens_predicted !== undefined ? { completionTokens: msgResult.tokens_predicted } : {}),
+      ...(timings?.predicted_ms !== undefined ? { totalTimeMs: timings.predicted_ms } : {}),
+    },
+  };
+}
+
+export async function runInference(
+  modelPath: string,
+  messages: RNLlamaOAICompatibleMessage[],
+  onToken?: InferenceTokenHandler,
+): Promise<ChatCompletionResult> {
   try {
-    await llamaContext.clearCache(false);
-
-    const jinjaSupported = await llamaContext.isJinjaSupported();
-    const completionParams = {
-      messages,
-      n_predict: MAX_COMPLETION_TOKENS,
-      stop: STOP_WORDS,
-      ...(jinjaSupported
-        ? {
-            jinja: true,
-            enable_thinking: false,
-            reasoning_format: "none" as const,
-            chat_template_kwargs: { enable_thinking: false },
-          }
-        : {}),
-    };
-
-    const msgResult = await llamaContext.completion(
-      completionParams,
-      onToken
-        ? (data: TokenData) => {
-            onToken(extractStreamingDisplayText(data));
-          }
-        : undefined,
-    );
-
-    const timings = msgResult.timings;
-    const totalTimeMs = timings?.predicted_ms;
-    const completionTokens = msgResult.tokens_predicted;
-    const promptTokens = msgResult.tokens_evaluated;
-    const tokensPerSecond = timings?.predicted_per_second;
-    const cleanedText = sanitizeAssistantResponse(msgResult.text, msgResult.content);
-    const finalText = finalizeCompletionText(cleanedText, msgResult.truncated === true);
-
-    return {
-      text: finalText,
-      truncated: msgResult.truncated === true,
-      metrics: {
-        ...(tokensPerSecond !== undefined ? { tokensPerSecond } : {}),
-        ...(promptTokens !== undefined ? { promptTokens } : {}),
-        ...(completionTokens !== undefined ? { completionTokens } : {}),
-        ...(totalTimeMs !== undefined ? { totalTimeMs } : {}),
-      },
-    };
+    return await executeCompletion(modelPath, messages, onToken);
   } catch (error) {
     console.error("Error during chat completion:", error);
+    throw error;
+  }
+}
+
+export async function runContinueInference(
+  modelPath: string,
+  messages: ChatMessage[],
+  assistantMessageId: string,
+  partialAssistantContent: string,
+  onToken?: InferenceTokenHandler,
+): Promise<ChatCompletionResult> {
+  const continuationMessages = buildContinuationContext(messages, assistantMessageId, partialAssistantContent);
+
+  try {
+    return await executeCompletion(modelPath, continuationMessages, onToken);
+  } catch (error) {
+    console.error("Error during continuation completion:", error);
     throw error;
   }
 }

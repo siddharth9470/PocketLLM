@@ -8,6 +8,7 @@ export interface ChatMessage {
   // UI & Streaming State
   status: "pending" | "streaming" | "completed" | "error";
   error?: string; // Captures local failures (e.g., Context Window Exceeded, OOM)
+  truncated?: boolean;
 
   // Local LLM Telemetry (Crucial for tracking on-device performance)
   metrics?: {

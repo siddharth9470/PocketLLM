@@ -20,6 +20,7 @@ interface ChatMessageRow {
   status: string;
   created_at: string;
   error: string | null;
+  truncated: number | null;
   tokens_per_second: number | null;
   prompt_tokens: number | null;
   completion_tokens: number | null;
@@ -55,6 +56,10 @@ function rowToMessage(row: ChatMessageRow): ChatMessage {
 
   if (row.error) {
     message.error = row.error;
+  }
+
+  if (row.truncated === 1) {
+    message.truncated = true;
   }
 
   if (hasMetrics) {
@@ -122,6 +127,7 @@ class ChatDatabaseManager {
           status TEXT NOT NULL,
           created_at TEXT NOT NULL,
           error TEXT,
+          truncated INTEGER NOT NULL DEFAULT 0,
           tokens_per_second REAL,
           prompt_tokens INTEGER,
           completion_tokens INTEGER,
@@ -133,6 +139,12 @@ class ChatDatabaseManager {
       this.db.execute(
         "CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_id ON chat_messages(conversation_id);",
       );
+
+      try {
+        this.db.execute("ALTER TABLE chat_messages ADD COLUMN truncated INTEGER NOT NULL DEFAULT 0;");
+      } catch {
+        // Column already exists on upgraded databases.
+      }
     } catch (error) {
       console.error("CRITICAL: Failed to initialize chat database:", error);
       throw error;
@@ -256,11 +268,12 @@ class ChatDatabaseManager {
         status,
         created_at,
         error,
+        truncated,
         tokens_per_second,
         prompt_tokens,
         completion_tokens,
         total_time_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
       [
         message.id,
         message.conversationId,
@@ -269,12 +282,60 @@ class ChatDatabaseManager {
         message.status,
         message.createdAt,
         message.error ?? null,
+        message.truncated ? 1 : 0,
         message.metrics?.tokensPerSecond ?? null,
         message.metrics?.promptTokens ?? null,
         message.metrics?.completionTokens ?? null,
         message.metrics?.totalTimeMs ?? null,
       ],
     );
+  }
+
+  public async updateMessage(
+    messageId: string,
+    updates: Partial<Pick<ChatMessage, "content" | "status" | "error" | "truncated" | "metrics">>,
+  ): Promise<void> {
+    const connection = this.getDatabaseConnection();
+    const fields: string[] = [];
+    const values: Array<string | number | null> = [];
+
+    if (updates.content !== undefined) {
+      fields.push("content = ?");
+      values.push(updates.content);
+    }
+
+    if (updates.status !== undefined) {
+      fields.push("status = ?");
+      values.push(updates.status);
+    }
+
+    if (updates.error !== undefined) {
+      fields.push("error = ?");
+      values.push(updates.error);
+    }
+
+    if (updates.truncated !== undefined) {
+      fields.push("truncated = ?");
+      values.push(updates.truncated ? 1 : 0);
+    }
+
+    if (updates.metrics !== undefined) {
+      fields.push("tokens_per_second = ?");
+      values.push(updates.metrics.tokensPerSecond ?? null);
+      fields.push("prompt_tokens = ?");
+      values.push(updates.metrics.promptTokens ?? null);
+      fields.push("completion_tokens = ?");
+      values.push(updates.metrics.completionTokens ?? null);
+      fields.push("total_time_ms = ?");
+      values.push(updates.metrics.totalTimeMs ?? null);
+    }
+
+    if (fields.length === 0) {
+      return;
+    }
+
+    values.push(messageId);
+    await connection.execute(`UPDATE chat_messages SET ${fields.join(", ")} WHERE id = ?;`, values);
   }
 
   public async getMessagesByConversationId(conversationId: string): Promise<ChatMessage[]> {
@@ -319,6 +380,13 @@ export async function getConversationById(conversationId: string): Promise<Conve
 
 export async function createMessage(message: ChatMessage): Promise<void> {
   return chatDb.createMessage(message);
+}
+
+export async function updateMessage(
+  messageId: string,
+  updates: Partial<Pick<ChatMessage, "content" | "status" | "error" | "truncated" | "metrics">>,
+): Promise<void> {
+  return chatDb.updateMessage(messageId, updates);
 }
 
 export async function getMessagesByConversationId(conversationId: string): Promise<ChatMessage[]> {
