@@ -54,8 +54,6 @@ PODS:
     - ExpoModulesCore
   - ExpoFileSystem (19.0.23):
     - ExpoModulesCore
-  - ExpoFont (14.0.12):
-    - ExpoModulesCore
   - ExpoKeepAwake (15.0.8):
     - ExpoModulesCore
   - ExpoModulesCore (3.0.30):
@@ -114,7 +112,7 @@ PODS:
   - MMKV (2.4.0):
     - MMKVCore (~> 2.4.0)
   - MMKVCore (2.4.0)
-  - op-sqlite (16.2.2):
+  - op-sqlite (17.1.2):
     - hermes-engine
     - OpenSSL-Universal
     - RCTRequired
@@ -1554,7 +1552,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-keyboard-controller (1.21.13):
+  - react-native-keyboard-controller (1.21.14):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1566,7 +1564,7 @@ PODS:
     - React-graphics
     - React-ImageManager
     - React-jsi
-    - react-native-keyboard-controller/common (= 1.21.13)
+    - react-native-keyboard-controller/common (= 1.21.14)
     - React-NativeModulesApple
     - React-RCTFabric
     - React-renderercss
@@ -1577,7 +1575,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-keyboard-controller/common (1.21.13):
+  - react-native-keyboard-controller/common (1.21.14):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2220,7 +2218,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNWorklets (0.10.1):
+  - RNSentry (7.2.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2242,10 +2240,34 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNWorklets/apple (= 0.10.1)
-    - RNWorklets/common (= 0.10.1)
+    - Sentry/HybridSDK (= 8.56.1)
     - Yoga
-  - RNWorklets/apple (0.10.1):
+  - RNWorklets (0.10.2):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - RNWorklets/apple (= 0.10.2)
+    - RNWorklets/common (= 0.10.2)
+    - Yoga
+  - RNWorklets/apple (0.10.2):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2268,7 +2290,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNWorklets/common (0.10.1):
+  - RNWorklets/common (0.10.2):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2291,6 +2313,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - Sentry/HybridSDK (8.56.1)
   - Yoga (0.0.0)
 
 DEPENDENCIES:
@@ -2300,7 +2323,6 @@ DEPENDENCIES:
   - ExpoAsset (from `../node_modules/expo-asset/ios`)
   - ExpoCrypto (from `../node_modules/expo-crypto/ios`)
   - ExpoFileSystem (from `../node_modules/expo-file-system/ios`)
-  - ExpoFont (from `../node_modules/expo/node_modules/expo-font/ios`)
   - ExpoKeepAwake (from `../node_modules/expo/node_modules/expo-keep-awake/ios`)
   - ExpoModulesCore (from `../node_modules/expo-modules-core`)
   - ExpoSecureStore (from `../node_modules/expo-secure-store/ios`)
@@ -2385,6 +2407,7 @@ DEPENDENCIES:
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNScreens (from `../node_modules/react-native-screens`)
+  - "RNSentry (from `../node_modules/@sentry/react-native`)"
   - RNWorklets (from `../node_modules/react-native-worklets`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
@@ -2393,6 +2416,7 @@ SPEC REPOS:
     - MMKV
     - MMKVCore
     - OpenSSL-Universal
+    - Sentry
 
 EXTERNAL SOURCES:
   AsyncStorage:
@@ -2407,8 +2431,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-crypto/ios"
   ExpoFileSystem:
     :path: "../node_modules/expo-file-system/ios"
-  ExpoFont:
-    :path: "../node_modules/expo/node_modules/expo-font/ios"
   ExpoKeepAwake:
     :path: "../node_modules/expo/node_modules/expo-keep-awake/ios"
   ExpoModulesCore:
@@ -2576,6 +2598,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-reanimated"
   RNScreens:
     :path: "../node_modules/react-native-screens"
+  RNSentry:
+    :path: "../node_modules/@sentry/react-native"
   RNWorklets:
     :path: "../node_modules/react-native-worklets"
   Yoga:
@@ -2588,7 +2612,6 @@ SPEC CHECKSUMS:
   ExpoAsset: 9e5a7c9c0a9fb83ad5b2bb365141f2bd7f289b66
   ExpoCrypto: e2a2c4c748aac8485e5675f027b7901f511d43ff
   ExpoFileSystem: a8e7fb1e958471764fb48d281cf9fa81a9e4d77c
-  ExpoFont: dfb7c572372b610da45b41e3b436321fd6a97215
   ExpoKeepAwake: 55f75eca6499bb9e4231ebad6f3e9cb8f99c0296
   ExpoModulesCore: 0026187d100e599ea35b507fe6a9bcdc572a0268
   ExpoSecureStore: d32f751874a2ceb5aaeebeb3578e165c1ba2b24a
@@ -2597,7 +2620,7 @@ SPEC CHECKSUMS:
   llama-rn: 08f8b192f63530b373ba794ef7d3710dfd342f9e
   MMKV: 86859fdfa2b0b21db1fd6e48788474a6416a2c77
   MMKVCore: 3d16ce9f7d411e135020915fde98a056859a1efa
-  op-sqlite: d7be28383e9c08a860f2dde78ded101cb6660e04
+  op-sqlite: 6cf4cf717567180707bf372c894b27f9bce04a51
   OpenSSL-Universal: ecee7b138fa75a74ecf00d7ffd248fb584739b9e
   RCTDeprecation: dbbb85eae640e3b43cc16462d0476b00ca5959ae
   RCTRequired: 7047b18af29a76069818fd3fa0f4df423483abab
@@ -2636,7 +2659,7 @@ SPEC CHECKSUMS:
   React-Mapbuffer: 019786f44ee5f1556493e01a72eca223a2d46356
   React-microtasksnativemodule: 5855ca396a2748042ea1b856e628d9c6a740f6c6
   react-native-background-downloader: d1bcea281c64e129d113b61a9405fab1c7f26b23
-  react-native-keyboard-controller: d31afc24a4c4d163a3fbbf3cffdb6dd147a14498
+  react-native-keyboard-controller: 12a4fcb34b06fb63d022e77790e54b21c8895f0e
   react-native-safe-area-context: 37e680fc4cace3c0030ee46e8987d24f5d3bdab2
   React-NativeModulesApple: de8b90a262c3e13e950b645186a47c3ff667052d
   React-networking: 70fca7678ef2673d9ff1f8cc0e1f809e1be954ce
@@ -2675,7 +2698,9 @@ SPEC CHECKSUMS:
   RNGestureHandler: ef375d2123e4360183ee184b66c998918c9487e1
   RNReanimated: 307d6646b0d5b330454eee184099f4dd48cc5086
   RNScreens: d8d6f1792f6e7ac12b0190d33d8d390efc0c1845
-  RNWorklets: df0d5e3cdf41e1c874974fc6bed8c91dd0c24d3b
+  RNSentry: 41979b419908128847ef662cc130a400b7576fa9
+  RNWorklets: 29e8fc4de4adb7b6d0955fea45e9f99deef8834c
+  Sentry: b3ec44d01708fce73f99b544beb57e890eca4406
   Yoga: 90687fcd1ebd927341caed917696d692813c0b24
 
 PODFILE CHECKSUM: 98c15f429d63f01590d6d9f3a4080d9895539a61
