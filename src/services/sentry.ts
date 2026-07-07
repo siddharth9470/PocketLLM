@@ -25,7 +25,7 @@ export function initSentry(): void {
   Sentry.init({
     dsn: SENTRY_DSN,
     enabled,
-    debug: __DEV__,
+    debug: false,
     environment: __DEV__ ? "development" : "production",
     release: `pocketllm@${appVersion}`,
     dist: Constants.nativeBuildVersion ?? undefined,
