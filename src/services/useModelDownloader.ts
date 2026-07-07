@@ -86,6 +86,7 @@ export const useModelDownloader = () => {
                   localFilePath: fileUri,
                   status: "completed",
                   downloadedAt: Date.now(),
+                  fileSizeBytes: bytesTotal,
                 },
               });
               markModelDownloaded(modelId);
@@ -187,6 +188,7 @@ export const useModelDownloader = () => {
           status: "completed",
           downloadedAt: Date.now(),
           localFilePath: fileUri,
+          fileSizeBytes: fileInfo.size ?? undefined,
         },
       });
       markModelDownloaded(model.id);

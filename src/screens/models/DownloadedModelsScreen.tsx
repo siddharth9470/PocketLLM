@@ -17,16 +17,11 @@ import { colors, radii, spacing, typography } from "../../constants/theme";
 import { getDownloadedModelsList } from "../../db/ModelDB";
 import type { HuggingFaceModel } from "../../types/models";
 import { formatFileSize } from "../../utils/formatFileSize";
-import { getModelFileSizeBytes } from "../../utils/modelFileStorage";
 import { parseModelId } from "../../utils/parseModelId";
 
-interface DownloadedModelEntry extends HuggingFaceModel {
-  fileSizeBytes: number | null;
-}
-
 interface DownloadedModelRowProps {
-  item: DownloadedModelEntry;
-  onDelete: (item: DownloadedModelEntry) => void;
+  item: HuggingFaceModel;
+  onDelete: (item: HuggingFaceModel) => void;
 }
 
 function shortenPath(path: string, maxLength = 48): string {
@@ -52,8 +47,11 @@ function formatDownloadedAt(timestamp: number | undefined): string {
 const DownloadedModelRow = memo(function DownloadedModelRow({ item, onDelete }: DownloadedModelRowProps) {
   const { author, name } = parseModelId(item.id);
   const localPath = item.downloadInfo?.localFilePath ?? "";
+  const storedSizeBytes = item.downloadInfo?.fileSizeBytes;
   const fileSizeLabel =
-    item.fileSizeBytes == null ? DownloadedModelsLabels.SIZE_UNKNOWN : formatFileSize(item.fileSizeBytes);
+    storedSizeBytes == null || storedSizeBytes <= 0
+      ? DownloadedModelsLabels.SIZE_UNKNOWN
+      : formatFileSize(storedSizeBytes);
 
   return (
     <View style={styles.card}>
@@ -101,28 +99,12 @@ const DownloadedModelRow = memo(function DownloadedModelRow({ item, onDelete }: 
   );
 });
 
-async function loadDownloadedModelsWithSizes(): Promise<DownloadedModelEntry[]> {
-  const models = await getDownloadedModelsList();
-
-  return Promise.all(
-    models.map(async (model) => {
-      const localFilePath = model.downloadInfo?.localFilePath;
-      const fileSizeBytes = localFilePath ? await getModelFileSizeBytes(localFilePath) : null;
-
-      return {
-        ...model,
-        fileSizeBytes,
-      };
-    }),
-  );
-}
-
 export default function DownloadedModelsScreen() {
   const isFocused = useIsFocused();
   const { width } = useWindowDimensions();
   const contentMaxWidth = Math.min(width - spacing.lg * 2, 720);
 
-  const [models, setModels] = useState<DownloadedModelEntry[]>([]);
+  const [models, setModels] = useState<HuggingFaceModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -131,8 +113,8 @@ export default function DownloadedModelsScreen() {
     setLoadError(null);
 
     try {
-      const modelsWithSizes = await loadDownloadedModelsWithSizes();
-      setModels(modelsWithSizes);
+      const modelsFromDb = await getDownloadedModelsList();
+      setModels(modelsFromDb);
     } catch (error) {
       console.error("Failed to load downloaded models", error);
       setLoadError(DownloadedModelsLabels.LOAD_FAILED);
@@ -147,7 +129,7 @@ export default function DownloadedModelsScreen() {
     }
   }, [isFocused, loadModels]);
 
-  const handleDelete = useCallback((item: DownloadedModelEntry) => {
+  const handleDelete = useCallback((item: HuggingFaceModel) => {
     const { name } = parseModelId(item.id);
 
     Alert.alert(DownloadedModelsLabels.DELETE_TITLE, DownloadedModelsLabels.DELETE_MESSAGE(name), [
@@ -173,11 +155,11 @@ export default function DownloadedModelsScreen() {
   }, []);
 
   const renderItem = useCallback(
-    ({ item }: { item: DownloadedModelEntry }) => <DownloadedModelRow item={item} onDelete={handleDelete} />,
+    ({ item }: { item: HuggingFaceModel }) => <DownloadedModelRow item={item} onDelete={handleDelete} />,
     [handleDelete],
   );
 
-  const keyExtractor = useCallback((item: DownloadedModelEntry) => item.id, []);
+  const keyExtractor = useCallback((item: HuggingFaceModel) => item.id, []);
 
   if (isLoading) {
     return (

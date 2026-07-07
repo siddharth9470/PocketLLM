@@ -9,6 +9,6 @@ export const DownloadedModelsLabels = {
   DELETE_ACCESSIBILITY: "Delete downloaded model",
   FILE_SIZE: "File size",
   DOWNLOADED: "Downloaded",
-  SIZE_UNKNOWN: "Size unavailable",
+  SIZE_UNKNOWN: "Model size not available",
   LOAD_FAILED: "Could not load downloaded models.",
 } as const;

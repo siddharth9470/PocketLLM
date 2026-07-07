@@ -12,6 +12,7 @@ export interface ModelDownloadInfo {
   localFilePath?: string;
   status: DownloadStatus;
   downloadedAt?: number;
+  fileSizeBytes?: number;
 }
 
 export interface HuggingFaceModel {

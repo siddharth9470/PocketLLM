@@ -22,6 +22,7 @@ interface DownloadedModelRow {
   local_file_path: string | null;
   download_status: string;
   downloaded_at: number | null;
+  file_size: number | null;
 }
 
 function boolToSql(value: boolean | undefined): number | null {
@@ -58,12 +59,19 @@ function buildDownloadInfo(row: DownloadedModelRow): ModelDownloadInfo | undefin
   const status = (row.download_status as DownloadStatus) ?? "idle";
   const localFilePath = row.local_file_path ?? undefined;
   const downloadedAt = row.downloaded_at ?? undefined;
+  const fileSizeBytes = row.file_size ?? undefined;
 
-  if (status !== "idle" || localFilePath !== undefined || downloadedAt !== undefined) {
+  if (
+    status !== "idle" ||
+    localFilePath !== undefined ||
+    downloadedAt !== undefined ||
+    fileSizeBytes !== undefined
+  ) {
     return {
       status,
       ...(localFilePath !== undefined ? { localFilePath } : {}),
       ...(downloadedAt !== undefined ? { downloadedAt } : {}),
+      ...(fileSizeBytes !== undefined ? { fileSizeBytes } : {}),
     };
   }
 
@@ -141,9 +149,16 @@ class ModelDatabaseManager {
           siblings_json TEXT,
           local_file_path TEXT,
           download_status TEXT NOT NULL DEFAULT 'idle',
-          downloaded_at INTEGER
+          downloaded_at INTEGER,
+          file_size INTEGER
         );`,
       );
+
+      try {
+        this.db.execute("ALTER TABLE downloaded_models ADD COLUMN file_size INTEGER;");
+      } catch {
+        // Column already exists on upgraded databases.
+      }
     } catch (error) {
       console.error("CRITICAL: Failed to initialize model database:", error);
       throw error;
@@ -179,8 +194,9 @@ class ModelDatabaseManager {
           siblings_json,
           local_file_path,
           download_status,
-          downloaded_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          downloaded_at,
+          file_size
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           _id = excluded._id,
           name = excluded.name,
@@ -196,7 +212,8 @@ class ModelDatabaseManager {
           siblings_json = excluded.siblings_json,
           local_file_path = excluded.local_file_path,
           download_status = excluded.download_status,
-          downloaded_at = excluded.downloaded_at;`,
+          downloaded_at = excluded.downloaded_at,
+          file_size = COALESCE(excluded.file_size, downloaded_models.file_size);`,
         [
           model.id,
           model._id ?? null,
@@ -214,6 +231,7 @@ class ModelDatabaseManager {
           downloadInfo?.localFilePath ?? null,
           downloadInfo?.status ?? "idle",
           downloadInfo?.downloadedAt ?? null,
+          downloadInfo?.fileSizeBytes ?? null,
         ],
       );
     } catch (error) {
