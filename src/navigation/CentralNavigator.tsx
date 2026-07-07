@@ -1,20 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { colors } from "../constants/theme";
-import ChatListScreen from "../screens/chats/ChatListScreen";
-import ChatScreen from "../screens/chats/ChatScreen";
-import InitialScreen from "../screens/InitialScreen";
-import DownloadedModelsScreen from "../screens/models/DownloadedModelsScreen";
-import ModelsScreen from "../screens/models/ModelsScreen";
-import SettingsScreen from "../screens/settings/SettingsScreen";
+import { colors } from "@/constants/theme";
 import type {
   ChatsStackParamList,
   MainTabParamList,
   ModelsStackParamList,
   RootStackParamList,
   SettingsStackParamList,
-} from "./types";
+} from "@/navigation/types";
+import ChatListScreen from "@/screens/chats/ChatListScreen";
+import ChatScreen from "@/screens/chats/ChatScreen";
+import InitialScreen from "@/screens/InitialScreen";
+import DownloadedModelsScreen from "@/screens/models/DownloadedModelsScreen";
+import ModelsScreen from "@/screens/models/ModelsScreen";
+import SettingsScreen from "@/screens/settings/SettingsScreen";
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();

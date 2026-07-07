@@ -1,5 +1,5 @@
-import type { HuggingFaceModel } from "../types/models";
-import { getLanguageModelGgufFilename } from "../utils/ggufFileSelection";
+import type { HuggingFaceModel } from "@/types/models";
+import { getLanguageModelGgufFilename } from "@/utils/ggufFileSelection";
 
 export const getDownloadUrlForModel = async (
   model: HuggingFaceModel,

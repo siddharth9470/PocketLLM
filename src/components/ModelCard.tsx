@@ -1,12 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-
-import { ModelsScreenLabels } from "../constants/models";
-import { colors, radii, spacing, typography } from "../constants/theme";
-import type { HuggingFaceModel } from "../types/models";
-import { formatCount, parseModelId } from "../utils/parseModelId";
-import PrimaryButton from "./PrimaryButton";
-import TagChip from "./TagChip";
+import PrimaryButton from "@/components/PrimaryButton";
+import TagChip from "@/components/TagChip";
+import { ModelsScreenLabels } from "@/constants/models";
+import { colors, radii, spacing, typography } from "@/constants/theme";
+import type { HuggingFaceModel } from "@/types/models";
+import { formatCount, parseModelId } from "@/utils/parseModelId";
 
 interface ModelCardProps {
   model: HuggingFaceModel;

@@ -12,12 +12,12 @@ import {
   View,
 } from "react-native";
 
-import { DownloadedModelsLabels } from "../../constants/downloadedModels";
-import { colors, radii, spacing, typography } from "../../constants/theme";
-import { getDownloadedModelsList } from "../../db/ModelDB";
-import type { HuggingFaceModel } from "../../types/models";
-import { formatFileSize } from "../../utils/formatFileSize";
-import { parseModelId } from "../../utils/parseModelId";
+import { DownloadedModelsLabels } from "@/constants/downloadedModels";
+import { colors, radii, spacing, typography } from "@/constants/theme";
+import { getDownloadedModelsList } from "@/db/ModelDB";
+import type { HuggingFaceModel } from "@/types/models";
+import { formatFileSize } from "@/utils/formatFileSize";
+import { parseModelId } from "@/utils/parseModelId";
 
 interface DownloadedModelRowProps {
   item: HuggingFaceModel;

@@ -1,6 +1,6 @@
 import { ActivityIndicator, Pressable, type StyleProp, StyleSheet, Text, type ViewStyle } from "react-native";
 
-import { colors, radii, spacing, typography } from "../constants/theme";
+import { colors, radii, spacing, typography } from "@/constants/theme";
 
 interface PrimaryButtonProps {
   label: string;

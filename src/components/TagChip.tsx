@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import { colors, radii, spacing, typography } from "../constants/theme";
+import { colors, radii, spacing, typography } from "@/constants/theme";
 
 interface TagChipProps {
   label: string;

@@ -3,10 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
-import { initializeAllDatabases } from "./src/db";
-import CentralNavigator from "./src/navigation/CentralNavigator";
-import { ChatStoreProvider } from "./src/stores/chatStore";
-///import { DownloadStoreProvider } from "./src/stores/downloadStore";
+import { initializeAllDatabases } from "@/db";
+import CentralNavigator from "@/navigation/CentralNavigator";
+import { ChatStoreProvider } from "@/stores/chatStore";
 
 const queryClient = new QueryClient({
   defaultOptions: {

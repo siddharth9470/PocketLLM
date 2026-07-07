@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 
-import { ModelFilterField, SORT_FIELD_CONFIG, type SortField, type SortOption } from "../constants/modelFilters";
-import type { HuggingFaceModel } from "../types/models";
+import { ModelFilterField, SORT_FIELD_CONFIG, type SortField, type SortOption } from "@/constants/modelFilters";
+import type { HuggingFaceModel } from "@/types/models";
 
 export function useModelFilterSort(models: HuggingFaceModel[]) {
   const [sortBy, setSortBy] = useState<SortOption>(null);

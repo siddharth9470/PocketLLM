@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-import { colors, spacing, typography } from "../constants/theme";
-import type { RootStackScreenProps } from "../navigation/types";
+import { colors, spacing, typography } from "@/constants/theme";
+import type { RootStackScreenProps } from "@/navigation/types";
 
 export default function InitialScreen({ navigation }: RootStackScreenProps<"Initial">) {
   useEffect(() => {

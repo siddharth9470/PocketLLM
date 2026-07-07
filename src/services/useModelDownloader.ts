@@ -8,9 +8,9 @@ type DownloadTask = ReturnType<typeof createDownloadTask>;
 
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getDownloadedModels, getDownloadedModelsList, saveDownloadedModel } from "../db/ModelDB";
-import type { HuggingFaceModel } from "../types/models";
-import { getDownloadUrlForModel } from "./downloadHelpers";
+import { getDownloadedModels, getDownloadedModelsList, saveDownloadedModel } from "@/db/ModelDB";
+import { getDownloadUrlForModel } from "@/services/downloadHelpers";
+import type { HuggingFaceModel } from "@/types/models";
 
 export const useModelDownloader = () => {
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});

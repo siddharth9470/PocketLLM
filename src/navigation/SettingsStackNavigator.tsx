@@ -1,7 +1,7 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { colors } from "../constants/theme";
-import SettingsScreen from "../screens/settings/SettingsScreen";
-import type { SettingsStackParamList } from "./types";
+import { colors } from "@/constants/theme";
+import type { SettingsStackParamList } from "@/navigation/types";
+import SettingsScreen from "@/screens/settings/SettingsScreen";
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>();
 

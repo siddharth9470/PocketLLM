@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { BASE_URL, HUGGING_FACE_ENDPOINTS, HUGGING_FACE_MODEL_LIST_QUERY } from "../config/apiConfig";
-import type { HuggingFaceModel } from "../types/models";
+import { BASE_URL, HUGGING_FACE_ENDPOINTS, HUGGING_FACE_MODEL_LIST_QUERY } from "@/config/apiConfig";
+import type { HuggingFaceModel } from "@/types/models";
 
 const hfSiblingSchema = z.object({
   rfilename: z.string().catch(""),

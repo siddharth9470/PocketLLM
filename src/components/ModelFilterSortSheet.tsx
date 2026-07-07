@@ -8,8 +8,8 @@ import {
   SORT_OPTIONS,
   type SortField,
   type SortOption,
-} from "../constants/modelFilters";
-import { colors, radii, spacing, typography } from "../constants/theme";
+} from "@/constants/modelFilters";
+import { colors, radii, spacing, typography } from "@/constants/theme";
 
 const CHIP_GRID = {
   MIN_CHIP_WIDTH: 108,
@@ -98,31 +98,21 @@ export default function ModelFilterSortSheet({
       const isActive = sortBy === item;
       const { label } = SORT_FIELD_CONFIG[item];
 
-      return (
-        <SortOptionItem isActive={isActive} label={label} onPress={() => onToggleSort(item)} />
-      );
+      return <SortOptionItem isActive={isActive} label={label} onPress={() => onToggleSort(item)} />;
     },
     [sortBy, onToggleSort],
   );
 
   const renderAuthorItem = useCallback(
     ({ item }: { item: string }) => (
-      <FilterChipItem
-        label={item}
-        isActive={selectedAuthor === item}
-        onPress={() => onToggleAuthor(item)}
-      />
+      <FilterChipItem label={item} isActive={selectedAuthor === item} onPress={() => onToggleAuthor(item)} />
     ),
     [selectedAuthor, onToggleAuthor],
   );
 
   const renderPipelineTagItem = useCallback(
     ({ item }: { item: string }) => (
-      <FilterChipItem
-        label={item}
-        isActive={selectedPipelineTag === item}
-        onPress={() => onTogglePipelineTag(item)}
-      />
+      <FilterChipItem label={item} isActive={selectedPipelineTag === item} onPress={() => onTogglePipelineTag(item)} />
     ),
     [selectedPipelineTag, onTogglePipelineTag],
   );

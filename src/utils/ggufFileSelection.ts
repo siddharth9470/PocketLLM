@@ -1,4 +1,4 @@
-import type { HFSibling } from "../types/models";
+import type { HFSibling } from "@/types/models";
 
 const NON_LANGUAGE_GGUF_PATTERNS = [
   /mmproj/i,

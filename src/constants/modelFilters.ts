@@ -1,4 +1,4 @@
-import type { HuggingFaceModel } from "../types/models";
+import type { HuggingFaceModel } from "@/types/models";
 
 export const SortField = {
   LIKES: "likes",

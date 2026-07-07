@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 
-import { ChatScreenLabels } from "../constants/chat";
+import { ChatScreenLabels } from "@/constants/chat";
 import {
   conversationExists,
   createConversation,
@@ -21,18 +21,18 @@ import {
   getMessagesByConversationId,
   updateConversation,
   updateMessage,
-} from "../db/ChatDB";
+} from "@/db/ChatDB";
 import {
   buildChatContextFromHistory,
   classifyInferenceError,
   resolveDownloadedModelPath,
   runContinueInference,
   runInference,
-} from "../services/chatHelper";
-import type { ChatMessage, Conversation } from "../types/chat";
-import { deriveConversationTitle, generateChatId } from "../utils/chatIds";
-import { buildConversationPreview } from "../utils/conversationPreview";
-import { stripReasoningTags } from "../utils/reasoningFilter";
+} from "@/services/chatHelper";
+import type { ChatMessage, Conversation } from "@/types/chat";
+import { deriveConversationTitle, generateChatId } from "@/utils/chatIds";
+import { buildConversationPreview } from "@/utils/conversationPreview";
+import { stripReasoningTags } from "@/utils/reasoningFilter";
 
 interface SendMessageOptions {
   modelId: string;
@@ -51,11 +51,7 @@ interface ChatStore {
   setActiveConversationId: (conversationId: string | null) => void;
   setConversationModel: (conversationId: string, modelId: string) => Promise<void>;
   deleteConversation: (conversationId: string) => Promise<void>;
-  continueAssistantMessage: (
-    conversationId: string,
-    messageId: string,
-    options: SendMessageOptions,
-  ) => Promise<void>;
+  continueAssistantMessage: (conversationId: string, messageId: string, options: SendMessageOptions) => Promise<void>;
   sendMessage: (conversationId: string, content: string, options: SendMessageOptions) => Promise<void>;
 }
 

@@ -1,8 +1,8 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { colors } from "../constants/theme";
-import ChatListScreen from "../screens/chats/ChatListScreen";
-import ChatScreen from "../screens/chats/ChatScreen";
-import type { ChatsStackParamList } from "./types";
+import { colors } from "@/constants/theme";
+import type { ChatsStackParamList } from "@/navigation/types";
+import ChatListScreen from "@/screens/chats/ChatListScreen";
+import ChatScreen from "@/screens/chats/ChatScreen";
 
 const Stack = createNativeStackNavigator<ChatsStackParamList>();
 

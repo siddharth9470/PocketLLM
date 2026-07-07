@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/react-native";
 
-import { SENTRY_ENABLED } from "../constants/sentry";
+import { SENTRY_ENABLED } from "@/constants/sentry";
 
 type LogLevel = "debug" | "info" | "warning" | "error";
 
@@ -62,12 +62,7 @@ function addBreadcrumb(level: LogLevel, message: string, context?: LoggerContext
   });
 }
 
-function sendToSentry(
-  level: LogLevel,
-  message: string,
-  error?: unknown,
-  options?: LoggerOptions,
-): void {
+function sendToSentry(level: LogLevel, message: string, error?: unknown, options?: LoggerOptions): void {
   if (!SENTRY_ENABLED) {
     return;
   }

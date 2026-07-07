@@ -1,7 +1,7 @@
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
-import { chatDb } from "./ChatDB";
-import { modelDb } from "./ModelDB";
+import { chatDb } from "@/db/ChatDB";
+import { modelDb } from "@/db/ModelDB";
 
 const VAULT_KEY_NAME = "pocketllm_secure_aes_key";
 

@@ -1,7 +1,7 @@
 import type { IMessage, User } from "react-native-gifted-chat";
 
-import type { ChatMessage } from "../types/chat";
-import { stripReasoningTags } from "./reasoningFilter";
+import type { ChatMessage } from "@/types/chat";
+import { stripReasoningTags } from "@/utils/reasoningFilter";
 
 export const CHAT_USER: User = {
   _id: "user",

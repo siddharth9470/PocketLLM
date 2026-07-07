@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import { colors, spacing, typography } from "../../constants/theme";
-import type { SettingsStackScreenProps } from "../../navigation/types";
+import { colors, spacing, typography } from "@/constants/theme";
+import type { SettingsStackScreenProps } from "@/navigation/types";
 
 export default function SettingsScreen(_props: SettingsStackScreenProps<"Settings">) {
   return (

@@ -1,8 +1,8 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 
-import { ChatScreenLabels } from "../src/constants/chat";
-import type { Conversation } from "../src/types/chat";
-import type { HuggingFaceModel } from "../src/types/models";
+import { ChatScreenLabels } from "@/constants/chat";
+import type { Conversation } from "@/types/chat";
+import type { HuggingFaceModel } from "@/types/models";
 
 type HuggingFaceModelsQuery = UseQueryResult<HuggingFaceModel[], Error>;
 
@@ -25,7 +25,7 @@ export type MockChatStore = {
 };
 
 export function mockChatStore(overrides: Partial<MockChatStore> = {}): MockChatStore {
-  const { useChatStore } = require("../src/stores/chatStore") as typeof import("../src/stores/chatStore");
+  const { useChatStore } = require("@/stores/chatStore") as typeof import("@/stores/chatStore");
 
   const state: MockChatStore = {
     conversations: [],
@@ -45,9 +45,7 @@ export function mockChatStore(overrides: Partial<MockChatStore> = {}): MockChatS
   };
 
   if (overrides.getConversation === undefined) {
-    state.getConversation.mockImplementation(
-      (conversationId: string) => state.conversationDetails[conversationId],
-    );
+    state.getConversation.mockImplementation((conversationId: string) => state.conversationDetails[conversationId]);
   }
 
   jest.mocked(useChatStore).mockImplementation((selector) => selector(state));
@@ -55,8 +53,8 @@ export function mockChatStore(overrides: Partial<MockChatStore> = {}): MockChatS
 }
 
 export function restoreRealChatStore(): void {
-  const { useChatStore } = require("../src/stores/chatStore") as typeof import("../src/stores/chatStore");
-  const actual = jest.requireActual("../src/stores/chatStore") as typeof import("../src/stores/chatStore");
+  const { useChatStore } = require("@/stores/chatStore") as typeof import("@/stores/chatStore");
+  const actual = jest.requireActual("@/stores/chatStore") as typeof import("@/stores/chatStore");
   jest.mocked(useChatStore).mockImplementation(actual.useChatStore);
 }
 

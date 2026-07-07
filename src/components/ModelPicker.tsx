@@ -1,12 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useCallback, useEffect, useState } from "react";
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { ChatScreenLabels } from "../constants/chat";
-import { colors, radii, spacing, typography } from "../constants/theme";
-import { getDownloadedModelsList } from "../db/ModelDB";
-import type { HuggingFaceModel } from "../types/models";
-import { isLanguageModelGgufFilename } from "../utils/ggufFileSelection";
-import { parseModelId } from "../utils/parseModelId";
+import { ChatScreenLabels } from "@/constants/chat";
+import { colors, radii, spacing, typography } from "@/constants/theme";
+import { getDownloadedModelsList } from "@/db/ModelDB";
+import type { HuggingFaceModel } from "@/types/models";
+import { isLanguageModelGgufFilename } from "@/utils/ggufFileSelection";
+import { parseModelId } from "@/utils/parseModelId";
 
 interface ModelPickerProps {
   selectedModelId?: string;
@@ -116,8 +116,8 @@ export default function ModelPicker({
             <Text style={styles.sheetPrompt}>{ChatScreenLabels.MODEL_SELECT_PROMPT}</Text>
             {availableModels.length === 0 ? (
               <Text style={styles.emptyText}>
-                Download a text-generation GGUF from the Models tab. Vision projector files (mmproj) cannot
-                be used for chat.
+                Download a text-generation GGUF from the Models tab. Vision projector files (mmproj) cannot be used for
+                chat.
               </Text>
             ) : (
               <FlatList

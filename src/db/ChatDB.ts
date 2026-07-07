@@ -1,7 +1,7 @@
 import { ANDROID_DATABASE_PATH, type DB, IOS_LIBRARY_PATH, open } from "@op-engineering/op-sqlite";
 import { Platform } from "react-native";
 
-import type { ChatMessage, Conversation } from "../types/chat";
+import type { ChatMessage, Conversation } from "@/types/chat";
 
 interface ConversationRow {
   id: string;
@@ -160,9 +160,7 @@ class ChatDatabaseManager {
 
   public async conversationExists(conversationId: string): Promise<boolean> {
     const connection = this.getDatabaseConnection();
-    const result = await connection.execute("SELECT id FROM conversations WHERE id = ? LIMIT 1;", [
-      conversationId,
-    ]);
+    const result = await connection.execute("SELECT id FROM conversations WHERE id = ? LIMIT 1;", [conversationId]);
     return result.rows.length > 0;
   }
 
@@ -230,9 +228,7 @@ class ChatDatabaseManager {
 
   public async getConversations(): Promise<Conversation[]> {
     const connection = this.getDatabaseConnection();
-    const result = await connection.execute(
-      "SELECT * FROM conversations ORDER BY updated_at DESC;",
-    );
+    const result = await connection.execute("SELECT * FROM conversations ORDER BY updated_at DESC;");
 
     return result.rows.map((row) => rowToConversation(row as unknown as ConversationRow));
   }

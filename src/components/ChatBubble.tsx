@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import { colors, radii, spacing, typography } from "../constants/theme";
-import type { ChatMessage } from "../types/chat";
+import { colors, radii, spacing, typography } from "@/constants/theme";
+import type { ChatMessage } from "@/types/chat";
 
 interface ChatBubbleProps {
   message: ChatMessage;

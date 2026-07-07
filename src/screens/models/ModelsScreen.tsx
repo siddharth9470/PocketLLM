@@ -3,15 +3,15 @@ import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import ModelCard from "../../components/ModelCard";
-import ModelFilterSortSheet from "../../components/ModelFilterSortSheet";
-import { ModelsScreenLabels } from "../../constants/models";
-import { colors, radii, spacing, typography } from "../../constants/theme";
-import { useHuggingFaceModels } from "../../hooks/useHuggingFaceModels";
-import { useModelFilterSort } from "../../hooks/useModelFilterSort";
-import type { ModelsStackScreenProps } from "../../navigation/types";
-import { useModelDownloader } from "../../services/useModelDownloader";
-import type { HuggingFaceModel } from "../../types/models";
+import ModelCard from "@/components/ModelCard";
+import ModelFilterSortSheet from "@/components/ModelFilterSortSheet";
+import { ModelsScreenLabels } from "@/constants/models";
+import { colors, radii, spacing, typography } from "@/constants/theme";
+import { useHuggingFaceModels } from "@/hooks/useHuggingFaceModels";
+import { useModelFilterSort } from "@/hooks/useModelFilterSort";
+import type { ModelsStackScreenProps } from "@/navigation/types";
+import { useModelDownloader } from "@/services/useModelDownloader";
+import type { HuggingFaceModel } from "@/types/models";
 
 export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
   const isFocused = useIsFocused();
@@ -19,8 +19,14 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
 
   const { data: models = [], isLoading, error, refetch, isRefetching } = useHuggingFaceModels();
 
-  const { startDownload, cancelDownload, downloadProgress, activeDownloads, downloadedModelIds, syncDownloadedModelIds } =
-    useModelDownloader();
+  const {
+    startDownload,
+    cancelDownload,
+    downloadProgress,
+    activeDownloads,
+    downloadedModelIds,
+    syncDownloadedModelIds,
+  } = useModelDownloader();
 
   const {
     displayedModels,

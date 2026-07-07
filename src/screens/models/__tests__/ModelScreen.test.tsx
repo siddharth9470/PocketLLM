@@ -1,12 +1,11 @@
 import { render, screen } from "@testing-library/react-native";
-
+import { ModelsScreenLabels } from "@/constants/models";
+import { useHuggingFaceModels } from "@/hooks/useHuggingFaceModels";
+import ModelsScreen from "@/screens/models/ModelsScreen";
 import { buildHuggingFaceModelsQuery, MOCK_HF_MODELS } from "../../../../__tests__/testUtils";
-import { ModelsScreenLabels } from "../../../constants/models";
-import { useHuggingFaceModels } from "../../../hooks/useHuggingFaceModels";
-import ModelsScreen from "../ModelsScreen";
 
-jest.mock("../../../hooks/useHuggingFaceModels");
-jest.mock("../../../services/useModelDownloader", () => ({
+jest.mock("@/hooks/useHuggingFaceModels");
+jest.mock("@/services/useModelDownloader", () => ({
   useModelDownloader: () => ({
     activeDownloads: {},
     downloadProgress: {},

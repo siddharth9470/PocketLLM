@@ -3,13 +3,13 @@ import { useFocusEffect } from "@react-navigation/native";
 import { memo, useCallback } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
-import PrimaryButton from "../../components/PrimaryButton";
-import { ChatScreenLabels } from "../../constants/chat";
-import { colors, radii, spacing, typography } from "../../constants/theme";
-import type { ChatsStackScreenProps } from "../../navigation/types";
-import { useChatStore } from "../../stores/chatStore";
-import type { Conversation } from "../../types/chat";
-import { parseModelId } from "../../utils/parseModelId";
+import PrimaryButton from "@/components/PrimaryButton";
+import { ChatScreenLabels } from "@/constants/chat";
+import { colors, radii, spacing, typography } from "@/constants/theme";
+import type { ChatsStackScreenProps } from "@/navigation/types";
+import { useChatStore } from "@/stores/chatStore";
+import type { Conversation } from "@/types/chat";
+import { parseModelId } from "@/utils/parseModelId";
 
 interface ConversationRowProps {
   conversation: Conversation;
@@ -17,11 +17,7 @@ interface ConversationRowProps {
   onDelete: (conversation: Conversation) => void;
 }
 
-const ConversationRow = memo(function ConversationRow({
-  conversation,
-  onOpen,
-  onDelete,
-}: ConversationRowProps) {
+const ConversationRow = memo(function ConversationRow({ conversation, onOpen, onDelete }: ConversationRowProps) {
   const { name: modelName } = parseModelId(conversation.modelId || "unknown/model");
 
   return (

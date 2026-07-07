@@ -2,7 +2,7 @@ import { memo, useMemo } from "react";
 import { Platform, StyleSheet, Text, type TextStyle, View } from "react-native";
 import Markdown, { type MarkdownProps, renderRules } from "react-native-markdown-display";
 
-import { colors, radii, spacing, typography } from "../constants/theme";
+import { colors, radii, spacing, typography } from "@/constants/theme";
 
 const MESSAGE_LINE_HEIGHT = 22;
 

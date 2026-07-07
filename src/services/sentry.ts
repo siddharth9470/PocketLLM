@@ -1,7 +1,7 @@
 import * as Sentry from "@sentry/react-native";
 import Constants from "expo-constants";
 
-import { SENTRY_DSN, SENTRY_ENABLED } from "../constants/sentry";
+import { SENTRY_DSN, SENTRY_ENABLED } from "@/constants/sentry";
 
 let initialized = false;
 
@@ -15,9 +15,7 @@ export function initSentry(): void {
   const enabled = SENTRY_ENABLED && !!SENTRY_DSN;
 
   if (!enabled) {
-    console.warn(
-      "[Sentry] EXPO_PUBLIC_SENTRY_DSN is not set. Crash reporting is disabled.",
-    );
+    console.warn("[Sentry] EXPO_PUBLIC_SENTRY_DSN is not set. Crash reporting is disabled.");
   }
 
   const appVersion = Constants.expoConfig?.version ?? "1.0.0";

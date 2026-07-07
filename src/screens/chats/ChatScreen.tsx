@@ -12,30 +12,33 @@ import {
   View,
 } from "react-native";
 import { TextInput } from "react-native-gesture-handler";
-import { Bubble, type Composer, GiftedChat, type IMessage, InputToolbar, type MessageTextProps, Send } from "react-native-gifted-chat";
+import {
+  Bubble,
+  type Composer,
+  GiftedChat,
+  type IMessage,
+  InputToolbar,
+  type MessageTextProps,
+  Send,
+} from "react-native-gifted-chat";
 
-import { ChatMessageMarkdown } from "../../components/ChatMessageMarkdown";
-import ModelPicker from "../../components/ModelPicker";
-import { ChatScreenLabels } from "../../constants/chat";
-import { colors, radii, spacing, typography } from "../../constants/theme";
-import { getDownloadedModelsList } from "../../db/ModelDB";
-import type { ChatsStackScreenProps } from "../../navigation/types";
+import { ChatMessageMarkdown } from "@/components/ChatMessageMarkdown";
+import ModelPicker from "@/components/ModelPicker";
+import { ChatScreenLabels } from "@/constants/chat";
+import { colors, radii, spacing, typography } from "@/constants/theme";
+import { getDownloadedModelsList } from "@/db/ModelDB";
+import type { ChatsStackScreenProps } from "@/navigation/types";
 import {
   classifyInferenceError,
   initializeModel,
   releaseModel,
   resolveDownloadedModelPath,
-} from "../../services/chatHelper";
-import { useChatStore } from "../../stores/chatStore";
-import type { HuggingFaceModel } from "../../types/models";
-import { generateChatId } from "../../utils/chatIds";
-import { isLanguageModelGgufFilename } from "../../utils/ggufFileSelection";
-import {
-  CHAT_ASSISTANT,
-  CHAT_USER,
-  type PocketChatMessage,
-  toGiftedChatMessages,
-} from "../../utils/giftedChatAdapter";
+} from "@/services/chatHelper";
+import { useChatStore } from "@/stores/chatStore";
+import type { HuggingFaceModel } from "@/types/models";
+import { generateChatId } from "@/utils/chatIds";
+import { isLanguageModelGgufFilename } from "@/utils/ggufFileSelection";
+import { CHAT_ASSISTANT, CHAT_USER, type PocketChatMessage, toGiftedChatMessages } from "@/utils/giftedChatAdapter";
 
 const COMPOSER_LINE_HEIGHT = 22;
 const COMPOSER_VERTICAL_PADDING = spacing.sm * 2;
@@ -311,14 +314,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         onInferenceError: showInferenceError,
       });
     },
-    [
-      continueAssistantMessage,
-      conversationId,
-      isModelReady,
-      isSending,
-      selectedModelId,
-      showInferenceError,
-    ],
+    [continueAssistantMessage, conversationId, isModelReady, isSending, selectedModelId, showInferenceError],
   );
 
   const renderMessageText = useCallback((props: MessageTextProps<PocketChatMessage>) => {
@@ -334,9 +330,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     (props: ComponentProps<typeof Bubble>) => {
       const currentMessage = props.currentMessage as PocketChatMessage | undefined;
       const showContinue =
-        currentMessage?.truncated === true &&
-        currentMessage.user._id === CHAT_ASSISTANT._id &&
-        !isSending;
+        currentMessage?.truncated === true && currentMessage.user._id === CHAT_ASSISTANT._id && !isSending;
 
       return (
         <View style={styles.bubbleContainer}>

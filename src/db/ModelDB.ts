@@ -1,7 +1,7 @@
 import { ANDROID_DATABASE_PATH, type DB, IOS_LIBRARY_PATH, open } from "@op-engineering/op-sqlite";
 import { Platform } from "react-native";
 
-import type { DownloadStatus, HFSibling, HuggingFaceModel, ModelDownloadInfo } from "../types/models";
+import type { DownloadStatus, HFSibling, HuggingFaceModel, ModelDownloadInfo } from "@/types/models";
 
 type DownloadedMap = Record<string, HuggingFaceModel>;
 
@@ -61,12 +61,7 @@ function buildDownloadInfo(row: DownloadedModelRow): ModelDownloadInfo | undefin
   const downloadedAt = row.downloaded_at ?? undefined;
   const fileSizeBytes = row.file_size ?? undefined;
 
-  if (
-    status !== "idle" ||
-    localFilePath !== undefined ||
-    downloadedAt !== undefined ||
-    fileSizeBytes !== undefined
-  ) {
+  if (status !== "idle" || localFilePath !== undefined || downloadedAt !== undefined || fileSizeBytes !== undefined) {
     return {
       status,
       ...(localFilePath !== undefined ? { localFilePath } : {}),

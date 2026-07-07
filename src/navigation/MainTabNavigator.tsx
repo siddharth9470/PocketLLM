@@ -1,11 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 
-import { colors } from "../constants/theme";
-import ChatsStackNavigator from "./ChatsStackNavigator";
-import ModelsStackNavigator from "./ModelsStackNavigator";
-import SettingsStackNavigator from "./SettingsStackNavigator";
-import type { MainTabParamList } from "./types";
+import { colors } from "@/constants/theme";
+import ChatsStackNavigator from "@/navigation/ChatsStackNavigator";
+import ModelsStackNavigator from "@/navigation/ModelsStackNavigator";
+import SettingsStackNavigator from "@/navigation/SettingsStackNavigator";
+import type { MainTabParamList } from "@/navigation/types";
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 

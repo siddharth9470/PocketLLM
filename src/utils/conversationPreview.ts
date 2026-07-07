@@ -1,5 +1,5 @@
-import { CONVERSATION_PREVIEW_MAX_LENGTH } from "../constants/chat";
-import { stripReasoningTags } from "./reasoningFilter";
+import { CONVERSATION_PREVIEW_MAX_LENGTH } from "@/constants/chat";
+import { stripReasoningTags } from "@/utils/reasoningFilter";
 
 export function buildConversationPreview(text: string): string {
   const trimmed = stripReasoningTags(text);
