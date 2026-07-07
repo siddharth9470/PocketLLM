@@ -1,16 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
-
 import {
   buildMockConversations,
   MOCK_NEW_CONVERSATION_ID,
   mockChatStore,
   restoreRealChatStore,
-} from "../../../../__tests__/testUtils";
-import { ChatScreenLabels } from "../../../constants/chat";
-import ChatListScreen from "../ChatListScreen";
+} from "@tests/testUtils";
+import { ChatScreenLabels } from "@/constants/chat";
+import ChatListScreen from "@/screens/chats/ChatListScreen";
 
-jest.mock("../../../stores/chatStore", () => {
-  const actual = jest.requireActual("../../../stores/chatStore") as typeof import("../../../stores/chatStore");
+jest.mock("@/stores/chatStore", () => {
+  const actual = jest.requireActual("@/stores/chatStore") as typeof import("@/stores/chatStore");
   return {
     ...actual,
     useChatStore: jest.fn(actual.useChatStore),

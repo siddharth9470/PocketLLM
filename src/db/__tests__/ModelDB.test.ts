@@ -1,5 +1,5 @@
+import { buildCompletedModel, MOCK_DOWNLOADED_AT, MOCK_HF_MODELS, mockExecute } from "@tests/testUtils";
 import { modelDb, saveDownloadedModel } from "@/db/ModelDB";
-import { buildCompletedModel, MOCK_DOWNLOADED_AT, MOCK_HF_MODELS, mockExecute } from "../../../__tests__/testUtils";
 
 const INSERT = { localFilePath: 13, downloadStatus: 14, downloadedAt: 15, fileSize: 16 } as const;
 

@@ -4,6 +4,7 @@ module.exports = {
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
   testMatch: ["**/__tests__/**/*.(test|spec).(ts|tsx)"],
   moduleNameMapper: {
+    "^@tests/(.*)$": "<rootDir>/__tests__/$1",
     "^@/(.*)$": "<rootDir>/src/$1",
   },
   transformIgnorePatterns: [

@@ -8,7 +8,7 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 jest.mock("@op-engineering/op-sqlite", () => {
-  const { mockExecute } = require("./__tests__/testUtils");
+  const { mockExecute } = require("@tests/testUtils");
   return {
     ANDROID_DATABASE_PATH: "/mock/android/db",
     IOS_LIBRARY_PATH: "/mock/ios/db",

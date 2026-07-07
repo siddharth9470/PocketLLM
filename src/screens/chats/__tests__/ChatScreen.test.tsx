@@ -1,5 +1,4 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-
 import {
   buildCompletedModel,
   buildReadyConversation,
@@ -7,25 +6,25 @@ import {
   mockChatStore,
   mockExecute,
   restoreRealChatStore,
-} from "../../../../__tests__/testUtils";
-import { ChatScreenLabels } from "../../../constants/chat";
-import { chatDb } from "../../../db/ChatDB";
-import { getDownloadedModelsList } from "../../../db/ModelDB";
-import { initializeModel, releaseModel, resolveDownloadedModelPath, runInference } from "../../../services/chatHelper";
-import { ChatStoreProvider } from "../../../stores/chatStore";
-import ChatScreen from "../ChatScreen";
+} from "@tests/testUtils";
+import { ChatScreenLabels } from "@/constants/chat";
+import { chatDb } from "@/db/ChatDB";
+import { getDownloadedModelsList } from "@/db/ModelDB";
+import ChatScreen from "@/screens/chats/ChatScreen";
+import { initializeModel, releaseModel, resolveDownloadedModelPath, runInference } from "@/services/chatHelper";
+import { ChatStoreProvider } from "@/stores/chatStore";
 
-jest.mock("../../../stores/chatStore", () => {
-  const actual = jest.requireActual("../../../stores/chatStore") as typeof import("../../../stores/chatStore");
+jest.mock("@/stores/chatStore", () => {
+  const actual = jest.requireActual("@/stores/chatStore") as typeof import("@/stores/chatStore");
   return {
     ...actual,
     useChatStore: jest.fn(actual.useChatStore),
   };
 });
-jest.mock("../../../db/ModelDB", () => ({
+jest.mock("@/db/ModelDB", () => ({
   getDownloadedModelsList: jest.fn(),
 }));
-jest.mock("../../../services/chatHelper", () => ({
+jest.mock("@/services/chatHelper", () => ({
   initializeModel: jest.fn(),
   releaseModel: jest.fn(),
   resolveDownloadedModelPath: jest.fn(),
@@ -39,7 +38,7 @@ jest.mock("../../../services/chatHelper", () => ({
     logMessage: String(error),
   })),
 }));
-jest.mock("../../../utils/chatIds", () => ({
+jest.mock("@/utils/chatIds", () => ({
   generateChatId: jest.fn(() => `chat-id-${Date.now()}`),
   deriveConversationTitle: (prompt: string) => prompt.trim().slice(0, 50),
 }));
