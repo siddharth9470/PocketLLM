@@ -12,8 +12,9 @@ import {
   View,
 } from "react-native";
 import { TextInput } from "react-native-gesture-handler";
-import { Bubble, type Composer, GiftedChat, type IMessage, InputToolbar, Send } from "react-native-gifted-chat";
+import { Bubble, type Composer, GiftedChat, type IMessage, InputToolbar, type MessageTextProps, Send } from "react-native-gifted-chat";
 
+import { ChatMessageMarkdown } from "../../components/ChatMessageMarkdown";
 import ModelPicker from "../../components/ModelPicker";
 import { ChatScreenLabels } from "../../constants/chat";
 import { colors, radii, spacing, typography } from "../../constants/theme";
@@ -320,6 +321,15 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     ],
   );
 
+  const renderMessageText = useCallback((props: MessageTextProps<PocketChatMessage>) => {
+    const text = props.currentMessage?.text;
+    if (!text) {
+      return null;
+    }
+
+    return <ChatMessageMarkdown text={text} position={props.position ?? "left"} />;
+  }, []);
+
   const renderBubble = useCallback(
     (props: ComponentProps<typeof Bubble>) => {
       const currentMessage = props.currentMessage as PocketChatMessage | undefined;
@@ -335,10 +345,6 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
             wrapperStyle={{
               left: styles.assistantBubble,
               right: styles.userBubble,
-            }}
-            textStyle={{
-              left: styles.assistantText,
-              right: styles.userText,
             }}
           />
           {showContinue ? (
@@ -393,6 +399,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
             colorScheme="light"
             messageIdGenerator={generateChatId}
             renderBubble={renderBubble}
+            renderMessageText={renderMessageText}
             renderInputToolbar={renderInputToolbar}
             renderComposer={renderComposer}
             renderSend={renderSend}
@@ -478,14 +485,6 @@ const styles = StyleSheet.create({
   assistantBubble: {
     backgroundColor: colors.assistantBubble,
     borderBottomLeftRadius: radii.sm,
-  },
-  userText: {
-    ...typography.body,
-    color: colors.userBubbleText,
-  },
-  assistantText: {
-    ...typography.body,
-    color: colors.assistantText,
   },
   bubbleContainer: {
     maxWidth: "100%",
