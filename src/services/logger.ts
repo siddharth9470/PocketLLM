@@ -1,7 +1,3 @@
-import * as Sentry from "@sentry/react-native";
-
-import { SENTRY_ENABLED } from "@/constants/sentry";
-
 type LogLevel = "debug" | "info" | "warning" | "error";
 
 export interface LoggerContext {
@@ -12,6 +8,12 @@ export interface LoggerOptions {
   context?: LoggerContext;
   tags?: Record<string, string>;
   fingerprint?: string[];
+}
+
+export interface LoggerUser {
+  id?: string;
+  email?: string;
+  username?: string;
 }
 
 function serializeError(error: unknown): string {
@@ -49,71 +51,17 @@ function writeToConsole(level: LogLevel, message: string, context?: LoggerContex
   }
 }
 
-function addBreadcrumb(level: LogLevel, message: string, context?: LoggerContext): void {
-  if (!SENTRY_ENABLED) {
-    return;
-  }
-
-  Sentry.addBreadcrumb({
-    category: "app",
-    message,
-    level,
-    data: context,
-  });
-}
-
-function sendToSentry(level: LogLevel, message: string, error?: unknown, options?: LoggerOptions): void {
-  if (!SENTRY_ENABLED) {
-    return;
-  }
-
-  Sentry.withScope((scope) => {
-    if (options?.context) {
-      scope.setContext("details", options.context);
-    }
-
-    if (options?.tags) {
-      for (const [key, value] of Object.entries(options.tags)) {
-        scope.setTag(key, value);
-      }
-    }
-
-    if (options?.fingerprint) {
-      scope.setFingerprint(options.fingerprint);
-    }
-
-    if (error instanceof Error) {
-      scope.setExtra("logMessage", message);
-      Sentry.captureException(error);
-      return;
-    }
-
-    if (error !== undefined) {
-      scope.setExtra("error", serializeError(error));
-    }
-
-    Sentry.captureMessage(message, level);
-  });
-}
-
 export const logger = {
   debug(message: string, context?: LoggerContext): void {
     writeToConsole("debug", message, context);
-    addBreadcrumb("debug", message, context);
   },
 
   info(message: string, context?: LoggerContext): void {
     writeToConsole("info", message, context);
-    addBreadcrumb("info", message, context);
   },
 
-  warn(message: string, context?: LoggerContext, options?: LoggerOptions): void {
+  warn(message: string, context?: LoggerContext, _options?: LoggerOptions): void {
     writeToConsole("warning", message, context);
-    addBreadcrumb("warning", message, context);
-    sendToSentry("warning", message, undefined, {
-      ...options,
-      context: { ...options?.context, ...context },
-    });
   },
 
   error(message: string, error?: unknown, options?: LoggerOptions): void {
@@ -123,37 +71,16 @@ export const logger = {
     };
 
     writeToConsole("error", message, context);
-    addBreadcrumb("error", message, context);
-    sendToSentry("error", message, error, options);
   },
 
   captureException(error: unknown, options?: LoggerOptions): void {
     const message = serializeError(error);
     writeToConsole("error", message, options?.context);
-    sendToSentry("error", message, error, options);
   },
 
-  setUser(user: Sentry.User | null): void {
-    if (!SENTRY_ENABLED) {
-      return;
-    }
+  setUser(_user: LoggerUser | null): void {},
 
-    Sentry.setUser(user);
-  },
+  setTag(_key: string, _value: string): void {},
 
-  setTag(key: string, value: string): void {
-    if (!SENTRY_ENABLED) {
-      return;
-    }
-
-    Sentry.setTag(key, value);
-  },
-
-  setContext(name: string, context: LoggerContext): void {
-    if (!SENTRY_ENABLED) {
-      return;
-    }
-
-    Sentry.setContext(name, context);
-  },
+  setContext(_name: string, _context: LoggerContext): void {},
 };

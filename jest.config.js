@@ -8,7 +8,7 @@ module.exports = {
     "^@/(.*)$": "<rootDir>/src/$1",
   },
   transformIgnorePatterns: [
-    "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|@tanstack/.*|zod)",
+    "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|native-base|react-native-svg|@tanstack/.*|zod)",
   ],
   collectCoverageFrom: ["src/**/*.{ts,tsx}", "!src/**/*.d.ts"],
 };
