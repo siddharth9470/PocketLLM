@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   ScrollView,
@@ -18,6 +19,7 @@ import TagChip from "@/components/TagChip";
 import { ModelDetailsLabels } from "@/constants/models";
 import { colors, radii, spacing, typography } from "@/constants/theme";
 import type { ModelsStackScreenProps } from "@/navigation/types";
+import { localFileBasename } from "@/services/downloadHelpers";
 import { HuggingFaceService } from "@/services/HuggingFaceService";
 import { useModelDownloader } from "@/services/useModelDownloader";
 import type { GgufVariant } from "@/types/models";
@@ -33,9 +35,10 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
   const {
     startDownload,
     cancelDownload,
+    deleteDownloadedModel,
     downloadProgress,
     activeDownloads,
-    downloadedModelIds,
+    completedDownloads,
     syncDownloadedModelIds,
   } = useModelDownloader();
 
@@ -47,6 +50,8 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
 
   const model = detailsModel ?? listModel;
   const variantsReady = detailsModel != null;
+  const completedDownload = completedDownloads[model.id];
+  const downloadedFilename = localFileBasename(completedDownload?.downloadInfo?.localFilePath);
 
   useEffect(() => {
     if (isFocused) {
@@ -57,9 +62,13 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
   const variants = variantsReady ? listLanguageModelGgufVariants(detailsModel.siblings) : [];
   const { author, name: repoName } = parseModelId(model.id);
   const displayName = model.name && model.name !== model.id ? model.name : repoName;
-  const isRepoDownloaded = downloadedModelIds[model.id] ?? false;
   const isDownloading = activeDownloads[model.id] ?? false;
   const progress = downloadProgress[model.id] ?? 0;
+
+  const isVariantDownloaded = useCallback(
+    (filename: string) => downloadedFilename === filename && completedDownload?.downloadInfo?.status === "completed",
+    [completedDownload?.downloadInfo?.status, downloadedFilename],
+  );
 
   const handleDownload = useCallback(
     (variant: GgufVariant) => {
@@ -71,10 +80,29 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
     [detailsModel, startDownload],
   );
 
+  const handleDelete = useCallback(
+    (variant: GgufVariant) => {
+      Alert.alert(ModelDetailsLabels.DELETE_TITLE, ModelDetailsLabels.DELETE_MESSAGE(variant.filename), [
+        { text: ModelDetailsLabels.CANCEL, style: "cancel" },
+        {
+          text: ModelDetailsLabels.DELETE,
+          style: "destructive",
+          onPress: () => {
+            void deleteDownloadedModel(model.id).catch((deleteError: unknown) => {
+              console.error(`Failed to delete downloaded model ${model.id}:`, deleteError);
+            });
+          },
+        },
+      ]);
+    },
+    [deleteDownloadedModel, model.id],
+  );
+
   const renderVariant = useCallback(
     ({ item }: { item: GgufVariant }) => {
       const sizeLabel =
         item.sizeBytes != null && item.sizeBytes > 0 ? formatFileSize(item.sizeBytes) : ModelDetailsLabels.SIZE_UNKNOWN;
+      const isDownloaded = isVariantDownloaded(item.filename);
 
       return (
         <View style={styles.variantRow}>
@@ -85,20 +113,27 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
             <Text style={styles.variantSize}>{sizeLabel}</Text>
           </View>
           <Pressable
-            style={[styles.variantButton, (isDownloading || !variantsReady) && styles.variantButtonDisabled]}
-            onPress={() => handleDownload(item)}
+            style={[
+              isDownloaded ? styles.variantDeleteButton : styles.variantButton,
+              (isDownloading || !variantsReady) && styles.variantButtonDisabled,
+            ]}
+            onPress={() => (isDownloaded ? handleDelete(item) : handleDownload(item))}
             disabled={isDownloading || !variantsReady}
             accessibilityRole="button"
-            accessibilityLabel={`${ModelDetailsLabels.DOWNLOAD} ${item.filename}`}
+            accessibilityLabel={
+              isDownloaded
+                ? `${ModelDetailsLabels.DELETE} ${item.filename}`
+                : `${ModelDetailsLabels.DOWNLOAD} ${item.filename}`
+            }
           >
-            <Text style={styles.variantButtonText}>
-              {isRepoDownloaded ? ModelDetailsLabels.DOWNLOADED : ModelDetailsLabels.DOWNLOAD}
+            <Text style={isDownloaded ? styles.variantDeleteButtonText : styles.variantButtonText}>
+              {isDownloaded ? ModelDetailsLabels.DELETE : ModelDetailsLabels.DOWNLOAD}
             </Text>
           </Pressable>
         </View>
       );
     },
-    [handleDownload, isDownloading, isRepoDownloaded, variantsReady],
+    [handleDelete, handleDownload, isDownloading, isVariantDownloaded, variantsReady],
   );
 
   return (
@@ -186,13 +221,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.xxl,
-  },
-  centered: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.background,
-    gap: spacing.md,
   },
   loadingText: {
     ...typography.body,
@@ -315,10 +343,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  variantDeleteButton: {
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.danger,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   variantButtonDisabled: {
     opacity: 0.6,
   },
   variantButtonText: {
+    ...typography.caption,
+    color: colors.surface,
+    fontWeight: "600",
+  },
+  variantDeleteButtonText: {
     ...typography.caption,
     color: colors.surface,
     fontWeight: "600",

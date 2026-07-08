@@ -15,6 +15,14 @@ function buildResolveUrl(modelId: string, filename: string): string {
   return `https://huggingface.co/${modelId}/resolve/main/${encodeURIComponent(ggufBasename(filename))}`;
 }
 
+export function localFileBasename(fileUri?: string): string | null {
+  if (!fileUri) {
+    return null;
+  }
+
+  return fileUri.replace(/^file:\/\//, "").split("/").pop() ?? null;
+}
+
 // Fetches the byte size of a remote GGUF file from Hugging Face using an HTTP HEAD request.
 export async function getRemoteGgufFileSizeBytes(modelId: string, filename: string): Promise<number | null> {
   try {

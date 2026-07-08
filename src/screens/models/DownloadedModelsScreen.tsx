@@ -15,12 +15,15 @@ import {
 import { DownloadedModelsLabels } from "@/constants/downloadedModels";
 import { colors, radii, spacing, typography } from "@/constants/theme";
 import { getDownloadedModelsList } from "@/db/ModelDB";
+import type { ModelsStackScreenProps } from "@/navigation/types";
+import { useModelDownloader } from "@/services/useModelDownloader";
 import type { HuggingFaceModel } from "@/types/models";
 import { formatFileSize } from "@/utils/formatFileSize";
 import { parseModelId } from "@/utils/parseModelId";
 
 interface DownloadedModelRowProps {
   item: HuggingFaceModel;
+  onOpen: (item: HuggingFaceModel) => void;
   onDelete: (item: HuggingFaceModel) => void;
 }
 
@@ -44,7 +47,7 @@ function formatDownloadedAt(timestamp: number | undefined): string {
   });
 }
 
-const DownloadedModelRow = memo(function DownloadedModelRow({ item, onDelete }: DownloadedModelRowProps) {
+const DownloadedModelRow = memo(function DownloadedModelRow({ item, onOpen, onDelete }: DownloadedModelRowProps) {
   const { author, name } = parseModelId(item.id);
   const localPath = item.downloadInfo?.localFilePath ?? "";
   const storedSizeBytes = item.downloadInfo?.fileSizeBytes;
@@ -54,7 +57,11 @@ const DownloadedModelRow = memo(function DownloadedModelRow({ item, onDelete }: 
       : formatFileSize(storedSizeBytes);
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      onPress={() => onOpen(item)}
+      accessibilityRole="button"
+    >
       <View style={styles.cardHeader}>
         <View style={styles.titleBlock}>
           <Text style={styles.author} numberOfLines={1}>
@@ -95,14 +102,15 @@ const DownloadedModelRow = memo(function DownloadedModelRow({ item, onDelete }: 
           {shortenPath(localPath.replace(/^file:\/\//, ""))}
         </Text>
       ) : null}
-    </View>
+    </Pressable>
   );
 });
 
-export default function DownloadedModelsScreen() {
+export default function DownloadedModelsScreen({ navigation }: ModelsStackScreenProps<"DownloadedModels">) {
   const isFocused = useIsFocused();
   const { width } = useWindowDimensions();
   const contentMaxWidth = Math.min(width - spacing.lg * 2, 720);
+  const { deleteDownloadedModel } = useModelDownloader();
 
   const [models, setModels] = useState<HuggingFaceModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -129,34 +137,42 @@ export default function DownloadedModelsScreen() {
     }
   }, [isFocused, loadModels]);
 
-  const handleDelete = useCallback((item: HuggingFaceModel) => {
-    const { name } = parseModelId(item.id);
+  const handleOpen = useCallback(
+    (item: HuggingFaceModel) => {
+      navigation.navigate("ModelDetails", { model: item });
+    },
+    [navigation],
+  );
 
-    Alert.alert(DownloadedModelsLabels.DELETE_TITLE, DownloadedModelsLabels.DELETE_MESSAGE(name), [
-      { text: DownloadedModelsLabels.CANCEL, style: "cancel" },
-      {
-        text: DownloadedModelsLabels.DELETE,
-        style: "destructive",
-        onPress: () => {
-          const path = item.downloadInfo?.localFilePath;
+  const handleDelete = useCallback(
+    (item: HuggingFaceModel) => {
+      const { name } = parseModelId(item.id);
 
-          if (path) {
-            console.log("[SafeMode] Would delete model file:", path);
-          }
-
-          // TODO: Enable filesystem + DB deletion once safe-mode testing is complete.
-          // await FileSystem.deleteAsync(path, { idempotent: true });
-          // await removeDownloadedModel(item.id);
-
-          setModels((currentModels) => currentModels.filter((model) => model.id !== item.id));
+      Alert.alert(DownloadedModelsLabels.DELETE_TITLE, DownloadedModelsLabels.DELETE_MESSAGE(name), [
+        { text: DownloadedModelsLabels.CANCEL, style: "cancel" },
+        {
+          text: DownloadedModelsLabels.DELETE,
+          style: "destructive",
+          onPress: () => {
+            void deleteDownloadedModel(item.id)
+              .then(() => {
+                setModels((currentModels) => currentModels.filter((model) => model.id !== item.id));
+              })
+              .catch((error: unknown) => {
+                console.error(`Failed to delete downloaded model ${item.id}:`, error);
+              });
+          },
         },
-      },
-    ]);
-  }, []);
+      ]);
+    },
+    [deleteDownloadedModel],
+  );
 
   const renderItem = useCallback(
-    ({ item }: { item: HuggingFaceModel }) => <DownloadedModelRow item={item} onDelete={handleDelete} />,
-    [handleDelete],
+    ({ item }: { item: HuggingFaceModel }) => (
+      <DownloadedModelRow item={item} onOpen={handleOpen} onDelete={handleDelete} />
+    ),
+    [handleDelete, handleOpen],
   );
 
   const keyExtractor = useCallback((item: HuggingFaceModel) => item.id, []);
@@ -225,6 +241,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 2,
+  },
+  cardPressed: {
+    opacity: 0.92,
   },
   cardHeader: {
     flexDirection: "row",

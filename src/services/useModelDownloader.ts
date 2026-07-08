@@ -8,7 +8,7 @@ type DownloadTask = ReturnType<typeof createDownloadTask>;
 
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getDownloadedModels, getDownloadedModelsList, saveDownloadedModel } from "@/db/ModelDB";
+import { getDownloadedModels, getDownloadedModelsList, removeDownloadedModel, saveDownloadedModel } from "@/db/ModelDB";
 import { getDownloadUrlForModel } from "@/services/downloadHelpers";
 import type { HuggingFaceModel } from "@/types/models";
 
@@ -16,18 +16,22 @@ export const useModelDownloader = () => {
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
   const [activeDownloads, setActiveDownloads] = useState<Record<string, boolean>>({});
   const [downloadedModelIds, setDownloadedModelIds] = useState<Record<string, boolean>>({});
+  const [completedDownloads, setCompletedDownloads] = useState<Record<string, HuggingFaceModel>>({});
 
   const syncDownloadedModelIds = useCallback(async () => {
     const map = await getDownloadedModels();
     const ids: Record<string, boolean> = {};
+    const completed: Record<string, HuggingFaceModel> = {};
 
     for (const [id, model] of Object.entries(map)) {
       if (model.downloadInfo?.status === "completed") {
         ids[id] = true;
+        completed[id] = model;
       }
     }
 
     setDownloadedModelIds(ids);
+    setCompletedDownloads(completed);
   }, []);
 
   const markModelDownloaded = useCallback((modelId: string) => {
@@ -275,6 +279,38 @@ export const useModelDownloader = () => {
     console.log(`Canceled download for: ${modelId}`);
   }, []);
 
+  const deleteDownloadedModel = useCallback(async (modelId: string) => {
+    const current = await getDownloadedModels();
+    const existingModel = current[modelId];
+    const filePath = existingModel?.downloadInfo?.localFilePath;
+
+    if (activeTasksRef.current[modelId]) {
+      await cancelDownload(modelId);
+    }
+
+    if (filePath) {
+      try {
+        await FileSystem.deleteAsync(filePath, { idempotent: true });
+      } catch (error) {
+        console.error(`Failed to delete model file for ${modelId}:`, error);
+        throw error;
+      }
+    }
+
+    await removeDownloadedModel(modelId);
+
+    setDownloadedModelIds((prev) => {
+      const next = { ...prev };
+      delete next[modelId];
+      return next;
+    });
+    setCompletedDownloads((prev) => {
+      const next = { ...prev };
+      delete next[modelId];
+      return next;
+    });
+  }, [cancelDownload]);
+
   const retreiveCompletedDownloads = async () => {
     /**
      * This function retrieves the list of downloads that were completed
@@ -314,9 +350,11 @@ export const useModelDownloader = () => {
     pauseDownload,
     resumeDownload,
     cancelDownload,
+    deleteDownloadedModel,
     downloadProgress,
     activeDownloads,
     downloadedModelIds,
+    completedDownloads,
     syncDownloadedModelIds,
     retreiveCompletedDownloads,
   };
