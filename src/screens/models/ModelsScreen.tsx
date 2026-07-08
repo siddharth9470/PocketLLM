@@ -1,7 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 import ModelCard from "@/components/ModelCard";
 import ModelFilterSortSheet from "@/components/ModelFilterSortSheet";
@@ -24,6 +33,7 @@ interface ActiveDownloadItem {
 export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
   const isFocused = useIsFocused();
   const { navigation } = props;
+  const { width: windowWidth } = useWindowDimensions();
 
   const { data: models = [], isLoading, error, refetch, isRefetching } = useHuggingFaceModels();
   const {
@@ -70,6 +80,9 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
       });
   }, [activeDownloadFilenames, activeDownloadModels, activeDownloads, downloadProgress, models]);
 
+  const activeDownloadCardWidth =
+    activeDownloadsList.length > 1 ? Math.min(windowWidth * 0.88, 360) : windowWidth - spacing.lg * 2;
+
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -105,7 +118,11 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
 
       return (
         <Pressable
-          style={({ pressed }) => [styles.activeDownloadBanner, pressed && styles.activeDownloadBannerPressed]}
+          style={({ pressed }) => [
+            styles.activeDownloadBanner,
+            { width: activeDownloadCardWidth },
+            pressed && styles.activeDownloadBannerPressed,
+          ]}
           onPress={() => handleOpenModel(item.model)}
           accessibilityRole="button"
           accessibilityLabel={`${ModelsScreenLabels.ACTIVE_DOWNLOAD_TITLE}: ${repoTitle}`}
@@ -133,7 +150,7 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
         </Pressable>
       );
     },
-    [handleOpenModel],
+    [activeDownloadCardWidth, handleOpenModel],
   );
 
   const activeDownloadKeyExtractor = useCallback((item: ActiveDownloadItem) => item.modelId, []);
@@ -170,19 +187,22 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
       />
 
       {activeDownloadsList.length > 0 ? (
-        <FlatList
-          data={activeDownloadsList}
-          keyExtractor={activeDownloadKeyExtractor}
-          renderItem={renderActiveDownloadItem}
-          scrollEnabled={false}
-          style={styles.activeDownloadsSection}
-          contentContainerStyle={styles.activeDownloadsListContent}
-          ListHeaderComponent={
-            activeDownloadsList.length > 1 ? (
-              <Text style={styles.activeDownloadsSectionTitle}>{ModelsScreenLabels.ACTIVE_DOWNLOADS_TITLE}</Text>
-            ) : null
-          }
-        />
+        <View style={styles.activeDownloadsSection}>
+          {activeDownloadsList.length > 1 ? (
+            <Text style={styles.activeDownloadsSectionTitle}>{ModelsScreenLabels.ACTIVE_DOWNLOADS_TITLE}</Text>
+          ) : null}
+          <FlatList
+            data={activeDownloadsList}
+            keyExtractor={activeDownloadKeyExtractor}
+            renderItem={renderActiveDownloadItem}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            scrollEnabled={activeDownloadsList.length > 1}
+            style={styles.activeDownloadsList}
+            contentContainerStyle={styles.activeDownloadsListContent}
+            ItemSeparatorComponent={() => <View style={styles.activeDownloadSeparator} />}
+          />
+        </View>
       ) : null}
 
       <FlatList
@@ -236,7 +256,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   activeDownloadBanner: {
-    marginBottom: spacing.sm,
     padding: spacing.md,
     borderRadius: radii.lg,
     backgroundColor: colors.surface,
@@ -244,19 +263,26 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   activeDownloadsSection: {
-    marginHorizontal: spacing.lg,
     marginTop: spacing.md,
     marginBottom: spacing.xs,
     flexGrow: 0,
   },
+  activeDownloadsList: {
+    flexGrow: 0,
+  },
   activeDownloadsListContent: {
     flexGrow: 0,
+    paddingHorizontal: spacing.lg,
+  },
+  activeDownloadSeparator: {
+    width: spacing.sm,
   },
   activeDownloadsSectionTitle: {
     ...typography.caption,
     color: colors.textSecondary,
     fontWeight: "600",
     marginBottom: spacing.sm,
+    marginHorizontal: spacing.lg,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
