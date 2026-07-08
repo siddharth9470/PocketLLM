@@ -3,10 +3,14 @@ import { useCallback, useMemo, useState } from "react";
 import { ModelFilterField, SORT_FIELD_CONFIG, type SortField, type SortOption } from "@/constants/modelFilters";
 import type { HuggingFaceModel } from "@/types/models";
 
-export function useModelFilterSort(models: HuggingFaceModel[]) {
+export function useModelFilterSort(
+  models: HuggingFaceModel[],
+  downloadedModelIds: Record<string, boolean> = {},
+) {
   const [sortBy, setSortBy] = useState<SortOption>(null);
   const [selectedAuthor, setSelectedAuthor] = useState<string | null>(null);
   const [selectedPipelineTag, setSelectedPipelineTag] = useState<string | null>(null);
+  const [showDownloadedOnly, setShowDownloadedOnly] = useState(false);
 
   const { uniqueAuthors, uniquePipelineTags } = useMemo(() => {
     const authors = [...new Set(models.map((model) => model[ModelFilterField.AUTHOR]).filter(Boolean))].sort();
@@ -27,13 +31,17 @@ export function useModelFilterSort(models: HuggingFaceModel[]) {
       result = result.filter((model) => model[ModelFilterField.PIPELINE_TAG] === selectedPipelineTag);
     }
 
+    if (showDownloadedOnly) {
+      result = result.filter((model) => downloadedModelIds[model.id] === true);
+    }
+
     if (sortBy) {
       const { getValue } = SORT_FIELD_CONFIG[sortBy];
       return [...result].sort((a, b) => getValue(b) - getValue(a));
     }
 
     return result;
-  }, [models, selectedAuthor, selectedPipelineTag, sortBy]);
+  }, [models, selectedAuthor, selectedPipelineTag, showDownloadedOnly, downloadedModelIds, sortBy]);
 
   const toggleSort = useCallback((option: SortField) => {
     setSortBy((current) => (current === option ? null : option));
@@ -47,18 +55,25 @@ export function useModelFilterSort(models: HuggingFaceModel[]) {
     setSelectedPipelineTag((current) => (current === pipelineTag ? null : pipelineTag));
   }, []);
 
-  const hasActiveFilters = sortBy !== null || selectedAuthor !== null || selectedPipelineTag !== null;
+  const toggleDownloadedOnly = useCallback(() => {
+    setShowDownloadedOnly((current) => !current);
+  }, []);
+
+  const hasActiveFilters =
+    sortBy !== null || selectedAuthor !== null || selectedPipelineTag !== null || showDownloadedOnly;
 
   return {
     displayedModels,
     sortBy,
     selectedAuthor,
     selectedPipelineTag,
+    showDownloadedOnly,
     uniqueAuthors,
     uniquePipelineTags,
     toggleSort,
     toggleAuthor,
     togglePipelineTag,
+    toggleDownloadedOnly,
     hasActiveFilters,
   };
 }

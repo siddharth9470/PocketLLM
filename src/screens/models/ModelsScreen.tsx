@@ -33,13 +33,15 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
     sortBy,
     selectedAuthor,
     selectedPipelineTag,
+    showDownloadedOnly,
     uniqueAuthors,
     uniquePipelineTags,
     toggleSort,
     toggleAuthor,
     togglePipelineTag,
+    toggleDownloadedOnly,
     hasActiveFilters,
-  } = useModelFilterSort(models);
+  } = useModelFilterSort(models, downloadedModelIds);
 
   useEffect(() => {
     navigation.setOptions({
@@ -101,12 +103,14 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
         sortBy={sortBy}
         selectedAuthor={selectedAuthor}
         selectedPipelineTag={selectedPipelineTag}
+        showDownloadedOnly={showDownloadedOnly}
         uniqueAuthors={uniqueAuthors}
         uniquePipelineTags={uniquePipelineTags}
         hasActiveFilters={hasActiveFilters}
         onToggleSort={toggleSort}
         onToggleAuthor={toggleAuthor}
         onTogglePipelineTag={togglePipelineTag}
+        onToggleDownloadedOnly={toggleDownloadedOnly}
       />
 
       <FlatList

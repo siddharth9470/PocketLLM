@@ -23,6 +23,8 @@ export const ModelFilterSortLabels = {
   SORT_BY_LIKES: "Sort by Likes",
   SORT_BY_DOWNLOADS: "Sort by Downloads",
   SORT_DIRECTION: "↓ High to Low",
+  STATUS_SECTION: "Status",
+  DOWNLOADED_ONLY: "Downloaded models",
   AUTHOR_SECTION: "Author",
   PIPELINE_SECTION: "Pipeline",
   CLOSE: "Done",

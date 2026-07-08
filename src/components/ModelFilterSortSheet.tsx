@@ -22,12 +22,14 @@ interface ModelFilterSortSheetProps {
   sortBy: SortOption;
   selectedAuthor: string | null;
   selectedPipelineTag: string | null;
+  showDownloadedOnly: boolean;
   uniqueAuthors: string[];
   uniquePipelineTags: string[];
   hasActiveFilters: boolean;
   onToggleSort: (option: SortField) => void;
   onToggleAuthor: (author: string) => void;
   onTogglePipelineTag: (pipelineTag: string) => void;
+  onToggleDownloadedOnly: () => void;
 }
 
 interface FilterChipItemProps {
@@ -71,12 +73,14 @@ export default function ModelFilterSortSheet({
   sortBy,
   selectedAuthor,
   selectedPipelineTag,
+  showDownloadedOnly,
   uniqueAuthors,
   uniquePipelineTags,
   hasActiveFilters,
   onToggleSort,
   onToggleAuthor,
   onTogglePipelineTag,
+  onToggleDownloadedOnly,
 }: ModelFilterSortSheetProps) {
   const [visible, setVisible] = useState(false);
   const { width: windowWidth } = useWindowDimensions();
@@ -160,6 +164,15 @@ export default function ModelFilterSortSheet({
                   numColumns={2}
                   scrollEnabled={false}
                   columnWrapperStyle={styles.sortRow}
+                />
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>{ModelFilterSortLabels.STATUS_SECTION}</Text>
+                <FilterChipItem
+                  label={ModelFilterSortLabels.DOWNLOADED_ONLY}
+                  isActive={showDownloadedOnly}
+                  onPress={onToggleDownloadedOnly}
                 />
               </View>
 
