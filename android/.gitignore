@@ -1,16 +1,63 @@
-# OSX
+# =============================================================================
+# Android — generated artifacts & local machine state
 #
-.DS_Store
+# This project uses Expo prebuild with a checked-in android/ tree. Source that
+# belongs in Git: Gradle config, manifests, Kotlin entrypoints, res/, and the
+# debug keystore. Everything produced by Gradle, NDK/CMake, Metro bundling, or
+# native module post-build steps stays out of version control.
+# =============================================================================
 
-# Android/IntelliJ
-#
+# -----------------------------------------------------------------------------
+# Gradle & Android Studio
+# -----------------------------------------------------------------------------
+.gradle/
+**/.gradle/
+**/build/
 build/
-.idea
-.gradle
 local.properties
+.idea/
 *.iml
 *.hprof
-.cxx/
+captures/
+.externalNativeBuild/
 
-# Bundle artifacts
+# -----------------------------------------------------------------------------
+# NDK / CMake intermediates
+# -----------------------------------------------------------------------------
+.cxx/
+**/.cxx/
+
+# -----------------------------------------------------------------------------
+# Compiled native libraries (build tree + copied runtime assets)
+#
+# llama.rn copies Hexagon HTP libs into app/src/main/assets/ during native
+# builds. These are reproducible outputs, not hand-authored project source.
+# -----------------------------------------------------------------------------
+*.so
+*.so.*
+
+# -----------------------------------------------------------------------------
+# JS bundles & Hermes outputs (release / export:embed)
+# -----------------------------------------------------------------------------
 *.jsbundle
+**/index.android.bundle
+**/index.android.bundle.map
+**/modules.json
+
+# -----------------------------------------------------------------------------
+# Packaged app binaries (local assemble / bundle tasks)
+# -----------------------------------------------------------------------------
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# -----------------------------------------------------------------------------
+# Kotlin & Java build metadata
+# -----------------------------------------------------------------------------
+.kotlin/
+
+# -----------------------------------------------------------------------------
+# macOS noise inside the native tree
+# -----------------------------------------------------------------------------
+.DS_Store

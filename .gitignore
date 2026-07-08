@@ -1,37 +1,31 @@
-# --- Dependencies ---
+# =============================================================================
+# PocketLLM — root ignore rules
+#
+# Platform-native build outputs and Gradle/Xcode artifacts are defined in
+# android/.gitignore and ios/.gitignore. Keep those files authoritative
+# for anything under android/ and ios/.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Dependencies
+# -----------------------------------------------------------------------------
 node_modules/
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
-# --- Expo / React Native ---
+# -----------------------------------------------------------------------------
+# Expo & Metro
+# -----------------------------------------------------------------------------
 .expo/
 dist/
 web-build/
 expo-env.d.ts
 .metro-health-check*
 
-# --- Native (Crucial: Keep these folders in Git) ---
-# Only ignore the generated configuration files, NOT the folders
-android/local.properties
-android/.gradle/
-android/build/
-ios/build/
-ios/Pods/
-ios/.symlinks/
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-
-# --- Debug & Logs ---
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-*.log
-
-# --- Environment Secrets ---
+# -----------------------------------------------------------------------------
+# Environment & secrets
+# -----------------------------------------------------------------------------
 .env
 .env.local
 .env.*.local
@@ -39,14 +33,33 @@ yarn-error.*
 .env.test.local
 .env.production.local
 
-# --- macOS ---
-.DS_Store
+# Signing material (never commit release keys or provisioning profiles)
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
 *.pem
 
-# --- TypeScript ---
+# -----------------------------------------------------------------------------
+# TypeScript & test tooling
+# -----------------------------------------------------------------------------
 *.tsbuildinfo
+coverage/
+.nyc_output/
 
-# --- Editor / IDE ---
+# -----------------------------------------------------------------------------
+# Logs & debug output
+# -----------------------------------------------------------------------------
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# -----------------------------------------------------------------------------
+# OS & editors
+# -----------------------------------------------------------------------------
+.DS_Store
 .idea/
 .vscode/
 *.iml
