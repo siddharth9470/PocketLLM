@@ -39,14 +39,14 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
     syncDownloadedModelIds,
   } = useModelDownloader();
 
-  const { data, isLoading, error, isFetching } = useQuery({
+  const { data: detailsModel, error } = useQuery({
     queryKey: ["modelDetails", listModel.id],
     queryFn: () => HuggingFaceService.fetchModelDetails(listModel.id),
-    placeholderData: listModel,
     staleTime: 60_000,
   });
 
-  const model = data ?? listModel;
+  const model = detailsModel ?? listModel;
+  const variantsReady = detailsModel != null;
 
   useEffect(() => {
     if (isFocused) {
@@ -54,7 +54,7 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
     }
   }, [isFocused, syncDownloadedModelIds]);
 
-  const variants = listLanguageModelGgufVariants(model.siblings);
+  const variants = variantsReady ? listLanguageModelGgufVariants(detailsModel.siblings) : [];
   const { author, name: repoName } = parseModelId(model.id);
   const displayName = model.name && model.name !== model.id ? model.name : repoName;
   const isRepoDownloaded = downloadedModelIds[model.id] ?? false;
@@ -63,15 +63,18 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
 
   const handleDownload = useCallback(
     (variant: GgufVariant) => {
-      void startDownload(model, variant.filename, variant.sizeBytes);
+      if (!detailsModel) {
+        return;
+      }
+      void startDownload(detailsModel, variant.filename, variant.sizeBytes);
     },
-    [model, startDownload],
+    [detailsModel, startDownload],
   );
 
   const renderVariant = useCallback(
     ({ item }: { item: GgufVariant }) => {
       const sizeLabel =
-        item.sizeBytes != null && item.sizeBytes > 0 ? formatFileSize(item.sizeBytes) : "Size unknown";
+        item.sizeBytes != null && item.sizeBytes > 0 ? formatFileSize(item.sizeBytes) : ModelDetailsLabels.SIZE_UNKNOWN;
 
       return (
         <View style={styles.variantRow}>
@@ -82,9 +85,9 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
             <Text style={styles.variantSize}>{sizeLabel}</Text>
           </View>
           <Pressable
-            style={[styles.variantButton, isDownloading && styles.variantButtonDisabled]}
+            style={[styles.variantButton, (isDownloading || !variantsReady) && styles.variantButtonDisabled]}
             onPress={() => handleDownload(item)}
-            disabled={isDownloading}
+            disabled={isDownloading || !variantsReady}
             accessibilityRole="button"
             accessibilityLabel={`${ModelDetailsLabels.DOWNLOAD} ${item.filename}`}
           >
@@ -95,17 +98,8 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
         </View>
       );
     },
-    [handleDownload, isDownloading, isRepoDownloaded],
+    [handleDownload, isDownloading, isRepoDownloaded, variantsReady],
   );
-
-  if (isLoading && isFetching && variants.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>{ModelDetailsLabels.LOADING}</Text>
-      </View>
-    );
-  }
 
   return (
     <ScrollView
@@ -163,7 +157,12 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
 
       <Text style={styles.sectionTitle}>{ModelDetailsLabels.VARIANTS}</Text>
 
-      {variants.length === 0 ? (
+      {!variantsReady ? (
+        <View style={styles.variantsLoading}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.loadingText}>{ModelDetailsLabels.LOADING_VARIANTS}</Text>
+        </View>
+      ) : variants.length === 0 ? (
         <Text style={styles.emptyText}>{ModelDetailsLabels.NO_VARIANTS}</Text>
       ) : (
         <FlatList
@@ -277,6 +276,12 @@ const styles = StyleSheet.create({
     ...typography.headline,
     color: colors.text,
     marginBottom: spacing.md,
+  },
+  variantsLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
   },
   emptyText: {
     ...typography.body,

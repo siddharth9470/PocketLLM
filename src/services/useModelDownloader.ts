@@ -79,6 +79,7 @@ export const useModelDownloader = () => {
             const current = await getDownloadedModels();
             const existingModel = current[modelId];
             if (existingModel && fileUri) {
+              const fileSizeBytes = bytesTotal > 0 ? bytesTotal : existingModel.downloadInfo?.fileSizeBytes;
               await saveDownloadedModel({
                 ...existingModel,
                 downloadInfo: {
@@ -86,7 +87,7 @@ export const useModelDownloader = () => {
                   localFilePath: fileUri,
                   status: "completed",
                   downloadedAt: Date.now(),
-                  fileSizeBytes: bytesTotal,
+                  fileSizeBytes,
                 },
               });
               markModelDownloaded(modelId);
@@ -157,8 +158,9 @@ export const useModelDownloader = () => {
     reattachTasks();
   }, [attachTaskListeners]);
 
-  const startDownload = async (model: HuggingFaceModel) => {
-    const modelDownloadUrl = await getDownloadUrlForModel(model);
+  const startDownload = async (model: HuggingFaceModel, filename: string, knownSizeBytes?: number | null) => {
+    const modelDownloadUrl = await getDownloadUrlForModel(model, filename, knownSizeBytes);
+    console.log("modelDownloadUrl : ", modelDownloadUrl);
     if (!modelDownloadUrl) {
       console.error(`Download failed for model: ${model.id}`);
       return null;
@@ -173,6 +175,7 @@ export const useModelDownloader = () => {
         localFilePath: fileUri,
         status: "pending",
         downloadedAt: undefined,
+        fileSizeBytes: modelDownloadUrl.fileSizeBytes ?? model.ggufFileSizeBytes ?? undefined,
       },
     });
 
@@ -181,6 +184,10 @@ export const useModelDownloader = () => {
     if (fileInfo.exists) {
       console.log("Model already exists at:", fileUri);
       setDownloadProgress((prev) => ({ ...prev, [model.id]: 100 }));
+      const fileSizeBytes =
+        (fileInfo.exists && fileInfo.size != null && fileInfo.size > 0 ? fileInfo.size : undefined) ??
+        modelDownloadUrl.fileSizeBytes ??
+        undefined;
       await saveDownloadedModel({
         ...model,
         downloadInfo: {
@@ -188,7 +195,7 @@ export const useModelDownloader = () => {
           status: "completed",
           downloadedAt: Date.now(),
           localFilePath: fileUri,
-          fileSizeBytes: fileInfo.size ?? undefined,
+          fileSizeBytes,
         },
       });
       markModelDownloaded(model.id);

@@ -8,7 +8,9 @@ export const ModelsScreenLabels = {
 
 export const ModelDetailsLabels = {
   LOADING: "Loading model details...",
+  LOADING_VARIANTS: "Loading file sizes...",
   FETCH_ERROR: "Could not load model details.",
+  SIZE_UNKNOWN: "Size unknown",
   VARIANTS: "Available quantizations",
   NO_VARIANTS: "No language-model GGUF files found in this repo.",
   DOWNLOAD: "Download",
