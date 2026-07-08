@@ -18,15 +18,7 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
   const { navigation } = props;
 
   const { data: models = [], isLoading, error, refetch, isRefetching } = useHuggingFaceModels();
-
-  const {
-    startDownload,
-    cancelDownload,
-    downloadProgress,
-    activeDownloads,
-    downloadedModelIds,
-    syncDownloadedModelIds,
-  } = useModelDownloader();
+  const { downloadedModelIds, syncDownloadedModelIds } = useModelDownloader();
 
   const {
     displayedModels,
@@ -59,27 +51,16 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
     }
   }, [isFocused, syncDownloadedModelIds]);
 
-  const handleStopDownload = useCallback(
+  const handleOpenModel = useCallback(
     (model: HuggingFaceModel) => {
-      cancelDownload(model.id);
+      navigation.navigate("ModelDetails", { model });
     },
-    [cancelDownload],
+    [navigation],
   );
 
   const renderModelCard = useCallback(
-    ({ item }: { item: HuggingFaceModel }) => {
-      return (
-        <ModelCard
-          model={item}
-          downloadProgress={downloadProgress[item.id] ?? 0}
-          activeDownload={activeDownloads[item.id] ?? false}
-          isDownloaded={downloadedModelIds[item.id] ?? false}
-          onClickDownload={startDownload}
-          onStopDownload={handleStopDownload}
-        />
-      );
-    },
-    [startDownload, handleStopDownload, downloadProgress, activeDownloads, downloadedModelIds],
+    ({ item }: { item: HuggingFaceModel }) => <ModelCard model={item} onPress={handleOpenModel} />,
+    [handleOpenModel],
   );
 
   if (isLoading) {

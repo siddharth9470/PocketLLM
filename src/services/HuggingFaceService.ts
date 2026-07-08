@@ -2,12 +2,31 @@ import { z } from "zod";
 
 import { BASE_URL, HUGGING_FACE_ENDPOINTS, HUGGING_FACE_MODEL_LIST_QUERY } from "@/config/apiConfig";
 import type { HuggingFaceModel } from "@/types/models";
+import {
+  getLanguageModelGgufFilename,
+  resolveGgufFileSizeBytes,
+  resolveParameterBillions,
+} from "@/utils/ggufFileSelection";
 
-const hfSiblingSchema = z.object({
-  rfilename: z.string().catch(""),
-});
+const hfSiblingSchema = z
+  .object({
+    rfilename: z.string().catch(""),
+    size: z.number().optional(),
+    lfs: z.object({ size: z.number().optional() }).optional(),
+  })
+  .transform((sibling) => ({
+    rfilename: sibling.rfilename,
+    size: sibling.size ?? sibling.lfs?.size,
+  }));
 
-const huggingFaceModelSchema: z.ZodType<HuggingFaceModel> = z
+const hfGgufSchema = z
+  .object({
+    total: z.number().optional(),
+    totalFileSize: z.number().optional(),
+  })
+  .optional();
+
+const huggingFaceModelSchema = z
   .object({
     _id: z.string().optional(),
     id: z.string().min(1),
@@ -22,22 +41,33 @@ const huggingFaceModelSchema: z.ZodType<HuggingFaceModel> = z
     modelId: z.string().optional(),
     pipeline_tag: z.string().catch(""),
     siblings: z.array(hfSiblingSchema).catch([]),
+    gguf: hfGgufSchema,
   })
-  .transform((model) => ({
-    _id: model._id ?? model.id,
-    id: model.id,
-    name: model.name ?? model.id,
-    likes: model.likes,
-    private: model.private,
-    downloads: model.downloads,
-    tags: model.tags,
-    author: model.author,
-    library_name: model.library_name,
-    createdAt: model.createdAt,
-    modelId: model.modelId ?? model.id,
-    pipeline_tag: model.pipeline_tag,
-    siblings: model.siblings.filter((sibling) => sibling.rfilename.length > 0),
-  }));
+  .transform((model): HuggingFaceModel => {
+    const siblings = model.siblings.filter((sibling) => sibling.rfilename.length > 0);
+    const ggufFilename = getLanguageModelGgufFilename(siblings);
+
+    return {
+      _id: model._id ?? model.id,
+      id: model.id,
+      name: model.name ?? model.id,
+      likes: model.likes,
+      private: model.private,
+      downloads: model.downloads,
+      tags: model.tags,
+      author: model.author,
+      library_name: model.library_name,
+      createdAt: model.createdAt,
+      modelId: model.modelId ?? model.id,
+      pipeline_tag: model.pipeline_tag,
+      siblings,
+      parameterBillions: resolveParameterBillions(
+        [model.id, model.name ?? model.id, ggufFilename ?? ""],
+        model.gguf?.total,
+      ),
+      ggufFileSizeBytes: resolveGgufFileSizeBytes(siblings, model.gguf?.totalFileSize),
+    };
+  });
 
 const huggingFaceModelsResponseSchema = z.array(z.unknown()).transform((items) =>
   items.flatMap((item) => {
@@ -64,6 +94,25 @@ async function fetchModels(): Promise<HuggingFaceModel[]> {
   return parsed.data;
 }
 
+async function fetchModelDetails(modelId: string): Promise<HuggingFaceModel> {
+  const url = `${BASE_URL}${HUGGING_FACE_ENDPOINTS.MODELS}/${modelId}?blobs=true`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch model details: ${response.status} ${response.statusText}`);
+  }
+
+  const payload: unknown = await response.json();
+  const parsed = huggingFaceModelSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    throw new Error("Unexpected Hugging Face model details response shape.");
+  }
+
+  return parsed.data;
+}
+
 export const HuggingFaceService = {
   fetchModels,
+  fetchModelDetails,
 };

@@ -2,6 +2,12 @@ export type DownloadStatus = "idle" | "pending" | "downloading" | "completed" | 
 
 export interface HFSibling {
   rfilename: string;
+  size?: number;
+}
+
+export interface GgufVariant {
+  filename: string;
+  sizeBytes: number | null;
 }
 
 export interface HFModelDetails {
@@ -30,6 +36,8 @@ export interface HuggingFaceModel {
   modelId: string;
   pipeline_tag: string;
   siblings: HFSibling[];
+  parameterBillions: number | null;
+  ggufFileSizeBytes: number | null;
 
   // --- Local Device State ---
   // This is optional (?) because when you first fetch the list

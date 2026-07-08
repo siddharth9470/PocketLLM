@@ -143,6 +143,8 @@ export const MOCK_HF_MODELS: HuggingFaceModel[] = [
     createdAt: "2024-01-01T00:00:00.000Z",
     modelId: "google/gemma-2b-q4",
     siblings: [{ rfilename: "gemma-2b-q4.gguf" }],
+    parameterBillions: 2.6,
+    ggufFileSizeBytes: 1_600_000_000,
   },
 ];
 

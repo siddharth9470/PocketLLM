@@ -90,6 +90,8 @@ function rowToModel(row: DownloadedModelRow): HuggingFaceModel {
     modelId: row.model_id ?? "",
     pipeline_tag: row.pipeline_tag ?? "",
     siblings: parseJsonArray<HFSibling>(row.siblings_json),
+    parameterBillions: null,
+    ggufFileSizeBytes: null,
   };
 
   if (downloadInfo !== undefined) {

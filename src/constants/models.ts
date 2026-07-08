@@ -5,3 +5,14 @@ export const ModelsScreenLabels = {
   STOP_DOWNLOADING: "Stop downloading",
   STOP_DOWNLOADING_ACCESSIBILITY: "Stop downloading model",
 } as const;
+
+export const ModelDetailsLabels = {
+  LOADING: "Loading model details...",
+  FETCH_ERROR: "Could not load model details.",
+  VARIANTS: "Available quantizations",
+  NO_VARIANTS: "No language-model GGUF files found in this repo.",
+  DOWNLOAD: "Download",
+  DOWNLOADING: "Downloading",
+  STOP: "Stop",
+  DOWNLOADED: "Downloaded",
+} as const;

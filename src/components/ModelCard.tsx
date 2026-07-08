@@ -1,45 +1,42 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import PrimaryButton from "@/components/PrimaryButton";
 import TagChip from "@/components/TagChip";
-import { ModelsScreenLabels } from "@/constants/models";
 import { colors, radii, spacing, typography } from "@/constants/theme";
 import type { HuggingFaceModel } from "@/types/models";
-import { formatCount, parseModelId } from "@/utils/parseModelId";
+import { formatCount, formatParameterBillions, parseModelId } from "@/utils/parseModelId";
 
 interface ModelCardProps {
   model: HuggingFaceModel;
-  downloadProgress: number;
-  activeDownload: boolean;
-  onClickDownload: (item: HuggingFaceModel) => void;
-  onStopDownload?: (item: HuggingFaceModel) => void;
-  isDownloaded?: boolean;
-  isDownloading?: boolean;
-  progress?: number;
+  onPress: (model: HuggingFaceModel) => void;
 }
 
-export default function ModelCard(props: ModelCardProps) {
-  const {
-    model,
-    onClickDownload,
-    onStopDownload,
-    downloadProgress,
-    activeDownload,
-    isDownloaded = false,
-    isDownloading,
-    progress = 0,
-  } = props;
-  const downloading = typeof isDownloading === "boolean" ? isDownloading : activeDownload;
-  const currentProgress = typeof props.progress === "number" ? props.progress : downloadProgress;
-
-  const { name } = parseModelId(model.id);
+export default function ModelCard({ model, onPress }: ModelCardProps) {
+  const { author, name: repoName } = parseModelId(model.id);
+  const displayName = model.name && model.name !== model.id ? model.name : repoName;
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.author}>{model.author}</Text>
-      <Text style={styles.name}>{name}</Text>
+    <Pressable
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      onPress={() => onPress(model)}
+      accessibilityRole="button"
+    >
+      <View style={styles.headerRow}>
+        <View style={styles.titleBlock}>
+          <Text style={styles.author}>{author || model.author}</Text>
+          <Text style={styles.name} numberOfLines={2}>
+            {displayName}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+      </View>
 
       <View style={styles.metricsRow}>
+        {model.parameterBillions != null ? (
+          <View style={styles.metric}>
+            <Ionicons name="hardware-chip-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.metricText}>{formatParameterBillions(model.parameterBillions)} params</Text>
+          </View>
+        ) : null}
         <View style={styles.metric}>
           <Ionicons name="download-outline" size={16} color={colors.textSecondary} />
           <Text style={styles.metricText}>{formatCount(model.downloads)}</Text>
@@ -60,33 +57,7 @@ export default function ModelCard(props: ModelCardProps) {
           <TagChip key={`${model.id}-${tag}`} label={tag} />
         ))}
       </ScrollView>
-
-      {downloading ? (
-        <>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, currentProgress ?? 0))}%` }]} />
-          </View>
-          <Text style={styles.progressText}>Downloading {Math.round(currentProgress ?? 0)}%</Text>
-          {onStopDownload ? (
-            <Pressable
-              style={styles.stopButton}
-              onPress={() => onStopDownload(model)}
-              accessibilityRole="button"
-              accessibilityLabel={ModelsScreenLabels.STOP_DOWNLOADING_ACCESSIBILITY}
-            >
-              <Text style={styles.stopButtonText}>{ModelsScreenLabels.STOP_DOWNLOADING}</Text>
-            </Pressable>
-          ) : null}
-        </>
-      ) : (
-        <PrimaryButton
-          label={isDownloaded ? "Open" : "Download"}
-          onPress={async () => onClickDownload(model)}
-          variant={isDownloaded ? "secondary" : "primary"}
-          style={[styles.downloadButton, isDownloaded && styles.completedButton]}
-        />
-      )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -102,6 +73,19 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  cardPressed: {
+    opacity: 0.92,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  titleBlock: {
+    flex: 1,
+    flexShrink: 1,
+  },
   author: {
     ...typography.caption,
     color: colors.textSecondary,
@@ -111,11 +95,11 @@ const styles = StyleSheet.create({
     ...typography.headline,
     fontSize: 18,
     color: colors.text,
-    marginBottom: spacing.md,
   },
   metricsRow: {
     flexDirection: "row",
-    gap: spacing.xl,
+    flexWrap: "wrap",
+    gap: spacing.md,
     marginBottom: spacing.md,
   },
   metric: {
@@ -128,50 +112,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   tagsScroll: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xs,
   },
   tagsContent: {
     paddingRight: spacing.lg,
-  },
-  progressTrack: {
-    height: 4,
-    backgroundColor: colors.progressTrack,
-    borderRadius: radii.pill,
-    overflow: "hidden",
-    marginBottom: spacing.md,
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: colors.primary,
-  },
-  progressText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
-    alignSelf: "center",
-  },
-  stopButton: {
-    minHeight: 44,
-    borderRadius: radii.md,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.danger,
-  },
-  stopButtonText: {
-    ...typography.headline,
-    fontSize: 15,
-    color: colors.danger,
-  },
-  downloadButton: {
-    backgroundColor: colors.primary,
-  },
-  completedButton: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.primary,
   },
 });

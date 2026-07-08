@@ -19,3 +19,20 @@ export function formatCount(value: number): string {
   }
   return String(value);
 }
+
+export function formatParameterBillions(billions: number): string {
+  if (billions >= 10) {
+    return `${Math.round(billions)}B`;
+  }
+  return `${billions.toFixed(1)}B`;
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 ** 3) {
+    return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  }
+  if (bytes >= 1024 ** 2) {
+    return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  }
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}

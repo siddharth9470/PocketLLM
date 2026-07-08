@@ -13,6 +13,7 @@ import ChatListScreen from "@/screens/chats/ChatListScreen";
 import ChatScreen from "@/screens/chats/ChatScreen";
 import InitialScreen from "@/screens/InitialScreen";
 import DownloadedModelsScreen from "@/screens/models/DownloadedModelsScreen";
+import ModelDetailsScreen from "@/screens/models/ModelDetails";
 import ModelsScreen from "@/screens/models/ModelsScreen";
 import DeviceInfoScreen from "@/screens/settings/DeviceInfo";
 import SettingsScreen from "@/screens/settings/SettingsScreen";
@@ -73,6 +74,11 @@ function ModelsStackNavigator() {
         name="DownloadedModels"
         component={DownloadedModelsScreen}
         options={{ title: "Downloaded Models" }}
+      />
+      <ModelsStack.Screen
+        name="ModelDetails"
+        component={ModelDetailsScreen}
+        options={({ route }) => ({ title: route.params.model.author || "Model Details" })}
       />
     </ModelsStack.Navigator>
   );
