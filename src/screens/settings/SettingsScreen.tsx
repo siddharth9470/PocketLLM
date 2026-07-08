@@ -1,9 +1,9 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors, spacing, typography } from "@/constants/theme";
+import { colors, radii, spacing, typography } from "@/constants/theme";
 import type { SettingsStackScreenProps } from "@/navigation/types";
 
-export default function SettingsScreen(_props: SettingsStackScreenProps<"Settings">) {
+export default function SettingsScreen({ navigation }: SettingsStackScreenProps<"Settings">) {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
@@ -11,15 +11,18 @@ export default function SettingsScreen(_props: SettingsStackScreenProps<"Setting
         <Text style={styles.subtitle}>Local on-device inference (coming soon)</Text>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.rowLabel}>Storage</Text>
-        <Text style={styles.rowValue}>Models save to the document directory</Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.rowLabel}>Inference</Text>
-        <Text style={styles.rowValue}>llama.rn integration is not wired yet</Text>
-      </View>
+      <Pressable
+        style={styles.linkCard}
+        onPress={() => navigation.navigate("DeviceInfo")}
+        accessibilityRole="button"
+        accessibilityLabel="Device info"
+      >
+        <View style={styles.linkContent}>
+          <Text style={styles.rowLabel}>Device info</Text>
+          <Text style={styles.rowValue}>View hardware, memory, and storage</Text>
+        </View>
+        <Text style={styles.chevron}>›</Text>
+      </Pressable>
     </View>
   );
 }
@@ -33,8 +36,20 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: radii.md,
     padding: spacing.lg,
+  },
+  linkCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  linkContent: {
+    flex: 1,
+    gap: spacing.xs,
   },
   title: {
     ...typography.headline,
@@ -50,10 +65,14 @@ const styles = StyleSheet.create({
     ...typography.headline,
     fontSize: 15,
     color: colors.text,
-    marginBottom: spacing.xs,
   },
   rowValue: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  chevron: {
+    ...typography.headline,
+    color: colors.textTertiary,
+    fontSize: 22,
   },
 });

@@ -14,6 +14,7 @@ import ChatScreen from "@/screens/chats/ChatScreen";
 import InitialScreen from "@/screens/InitialScreen";
 import DownloadedModelsScreen from "@/screens/models/DownloadedModelsScreen";
 import ModelsScreen from "@/screens/models/ModelsScreen";
+import DeviceInfoScreen from "@/screens/settings/DeviceInfo";
 import SettingsScreen from "@/screens/settings/SettingsScreen";
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -103,6 +104,7 @@ function SettingsStackNavigator() {
       }}
     >
       <SettingsStack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
+      <SettingsStack.Screen name="DeviceInfo" component={DeviceInfoScreen} options={{ title: "Device Info" }} />
     </SettingsStack.Navigator>
   );
 }

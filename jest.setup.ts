@@ -77,7 +77,35 @@ jest.mock("@kesha-antonov/react-native-background-downloader", () => ({
 
 jest.mock("expo-file-system/legacy", () => ({
   documentDirectory: "file:///mock/documents/",
+  cacheDirectory: "file:///mock/cache/",
   getFreeDiskStorageAsync: jest.fn().mockResolvedValue(Number.MAX_SAFE_INTEGER),
   deleteAsync: jest.fn().mockResolvedValue(undefined),
   getInfoAsync: jest.fn().mockResolvedValue({ exists: true, size: 0 }),
+  readDirectoryAsync: jest.fn().mockResolvedValue([]),
+  readAsStringAsync: jest.fn().mockResolvedValue(""),
+}));
+
+jest.mock("expo-device", () => ({
+  brand: "MockBrand",
+  manufacturer: "MockManufacturer",
+  modelName: "Mock Phone",
+  modelId: "MockPhone1,1",
+  osName: "MockOS",
+  osVersion: "1.0",
+  totalMemory: 8 * 1024 ** 3,
+  supportedCpuArchitectures: ["arm64"],
+  platformApiLevel: 34,
+}));
+
+jest.mock("react-native-device-info", () => ({
+  getDeviceName: jest.fn().mockResolvedValue("Mock Device"),
+  getModel: jest.fn().mockResolvedValue("Mock Model"),
+  getSystemName: jest.fn().mockResolvedValue("MockOS"),
+  getSystemVersion: jest.fn().mockResolvedValue("1.0"),
+  getTotalMemory: jest.fn().mockResolvedValue(8 * 1024 ** 3),
+  getUsedMemory: jest.fn().mockResolvedValue(256 * 1024 ** 2),
+  getFreeDiskStorage: jest.fn().mockResolvedValue(64 * 1024 ** 3),
+  getTotalDiskCapacity: jest.fn().mockResolvedValue(128 * 1024 ** 3),
+  supportedAbis: jest.fn().mockResolvedValue(["arm64-v8a"]),
+  getHardware: jest.fn().mockResolvedValue("mock-hardware"),
 }));
