@@ -1,3 +1,5 @@
+import * as FileSystem from "expo-file-system/legacy";
+
 import type { HuggingFaceModel } from "@/types/models";
 import { getLanguageModelGgufFilename } from "@/utils/ggufFileSelection";
 
@@ -13,6 +15,43 @@ function ggufBasename(filename: string): string {
 
 function buildResolveUrl(modelId: string, filename: string): string {
   return `https://huggingface.co/${modelId}/resolve/main/${encodeURIComponent(ggufBasename(filename))}`;
+}
+
+export function normalizeFileUri(filePath: string): string {
+  const trimmed = filePath.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("file://")) {
+    const pathPart = trimmed.slice("file://".length);
+    return `file://${pathPart.startsWith("/") ? pathPart : `/${pathPart}`}`;
+  }
+
+  return trimmed.startsWith("/") ? `file://${trimmed}` : trimmed;
+}
+
+export async function deleteLocalModelFile(filePath: string): Promise<void> {
+  const normalizedUri = normalizeFileUri(filePath);
+  const absolutePath = normalizedUri.replace(/^file:\/\//, "");
+  const candidates = [...new Set([normalizedUri, absolutePath, filePath.trim()])];
+  let lastError: unknown;
+
+  for (const candidate of candidates) {
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(candidate);
+      if (!fileInfo.exists || fileInfo.isDirectory) {
+        return;
+      }
+
+      await FileSystem.deleteAsync(candidate, { idempotent: true });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(`Unable to delete model file at ${filePath}`);
 }
 
 export function localFileBasename(fileUri?: string): string | null {

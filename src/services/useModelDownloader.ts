@@ -9,7 +9,8 @@ type DownloadTask = ReturnType<typeof createDownloadTask>;
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { getDownloadedModels, getDownloadedModelsList, removeDownloadedModel, saveDownloadedModel } from "@/db/ModelDB";
-import { getDownloadUrlForModel, localFileBasename } from "@/services/downloadHelpers";
+import { getDownloadUrlForModel, deleteLocalModelFile, localFileBasename, normalizeFileUri } from "@/services/downloadHelpers";
+import { releaseModelForPath } from "@/services/chatHelper";
 import type { HuggingFaceModel } from "@/types/models";
 
 interface DownloaderSnapshot {
@@ -94,7 +95,9 @@ function attachTaskListeners(task: DownloadTask, modelId: string, fallbackFileUr
       bytesTotal: number;
     }) => {
       const metadataFileUri = task.metadata.fileUri as string | undefined;
-      const fileUri = location || metadataFileUri || task.destination || fallbackFileUri;
+      const fileUri = normalizeFileUri(
+        location || metadataFileUri || task.destination || fallbackFileUri || "",
+      );
 
       delete activeTasks[modelId];
       clearActiveDownload(modelId, 100);
@@ -204,7 +207,7 @@ async function startDownload(
     return null;
   }
 
-  const fileUri = FileSystem.documentDirectory + modelDownloadUrl.filename;
+  const fileUri = normalizeFileUri(`${FileSystem.documentDirectory ?? ""}${modelDownloadUrl.filename}`);
 
   await saveDownloadedModel({
     ...model,
@@ -301,8 +304,11 @@ async function deleteDownloadedModel(modelId: string): Promise<void> {
     await cancelDownload(modelId);
   }
 
+  completeHandler(modelId);
+
   if (filePath) {
-    await FileSystem.deleteAsync(filePath, { idempotent: true });
+    await releaseModelForPath(filePath);
+    await deleteLocalModelFile(filePath);
   }
 
   await removeDownloadedModel(modelId);

@@ -393,6 +393,16 @@ export async function stopInference(): Promise<void> {
   }
 }
 
+export async function releaseModelForPath(filePath: string): Promise<void> {
+  if (!loadedModelPath || !llamaContext) {
+    return;
+  }
+
+  if (normalizeModelPath(filePath) === normalizeModelPath(loadedModelPath)) {
+    await releaseModel();
+  }
+}
+
 export async function releaseModel(): Promise<void> {
   if (llamaContext) {
     try {
