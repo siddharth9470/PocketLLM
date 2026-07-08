@@ -9,12 +9,13 @@ type DownloadTask = ReturnType<typeof createDownloadTask>;
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getDownloadedModels, getDownloadedModelsList, removeDownloadedModel, saveDownloadedModel } from "@/db/ModelDB";
-import { getDownloadUrlForModel } from "@/services/downloadHelpers";
+import { getDownloadUrlForModel, localFileBasename } from "@/services/downloadHelpers";
 import type { HuggingFaceModel } from "@/types/models";
 
 export const useModelDownloader = () => {
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
   const [activeDownloads, setActiveDownloads] = useState<Record<string, boolean>>({});
+  const [activeDownloadFilenames, setActiveDownloadFilenames] = useState<Record<string, string>>({});
   const [downloadedModelIds, setDownloadedModelIds] = useState<Record<string, boolean>>({});
   const [completedDownloads, setCompletedDownloads] = useState<Record<string, HuggingFaceModel>>({});
 
@@ -76,6 +77,11 @@ export const useModelDownloader = () => {
           });
           delete activeTasksRef.current[modelId];
           setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+          setActiveDownloadFilenames((prev) => {
+            const next = { ...prev };
+            delete next[modelId];
+            return next;
+          });
           setDownloadProgress((prev) => ({ ...prev, [modelId]: 100 }));
 
           // Persist metadata for fully downloaded model if we have a fileUri
@@ -110,6 +116,11 @@ export const useModelDownloader = () => {
         console.error(`Error downloading ${modelId}:`, error);
         delete activeTasksRef.current[modelId];
         setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+        setActiveDownloadFilenames((prev) => {
+          const next = { ...prev };
+          delete next[modelId];
+          return next;
+        });
         setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
       });
     },
@@ -135,10 +146,14 @@ export const useModelDownloader = () => {
         for (const nativeTask of lostTasks) {
           const modelId = nativeTask.id;
           const fallbackFileUri = downloadedModels[modelId]?.downloadInfo?.localFilePath;
+          const downloadingFilename = localFileBasename(fallbackFileUri);
 
           // Save instance ref
           activeTasksRef.current[modelId] = nativeTask;
           setActiveDownloads((prev) => ({ ...prev, [modelId]: true }));
+          if (downloadingFilename) {
+            setActiveDownloadFilenames((prev) => ({ ...prev, [modelId]: downloadingFilename }));
+          }
 
           setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
 
@@ -212,6 +227,7 @@ export const useModelDownloader = () => {
     }
 
     setActiveDownloads((prev) => ({ ...prev, [model.id]: true }));
+    setActiveDownloadFilenames((prev) => ({ ...prev, [model.id]: modelDownloadUrl.filename }));
     setDownloadProgress((prev) => ({ ...prev, [model.id]: 0 }));
 
     // 1. Create a clean base task instance
@@ -256,6 +272,11 @@ export const useModelDownloader = () => {
     }
 
     setActiveDownloads((prev) => ({ ...prev, [modelId]: false }));
+    setActiveDownloadFilenames((prev) => {
+      const next = { ...prev };
+      delete next[modelId];
+      return next;
+    });
     setDownloadProgress((prev) => ({ ...prev, [modelId]: 0 }));
 
     try {
@@ -279,37 +300,45 @@ export const useModelDownloader = () => {
     console.log(`Canceled download for: ${modelId}`);
   }, []);
 
-  const deleteDownloadedModel = useCallback(async (modelId: string) => {
-    const current = await getDownloadedModels();
-    const existingModel = current[modelId];
-    const filePath = existingModel?.downloadInfo?.localFilePath;
+  const deleteDownloadedModel = useCallback(
+    async (modelId: string) => {
+      const current = await getDownloadedModels();
+      const existingModel = current[modelId];
+      const filePath = existingModel?.downloadInfo?.localFilePath;
 
-    if (activeTasksRef.current[modelId]) {
-      await cancelDownload(modelId);
-    }
-
-    if (filePath) {
-      try {
-        await FileSystem.deleteAsync(filePath, { idempotent: true });
-      } catch (error) {
-        console.error(`Failed to delete model file for ${modelId}:`, error);
-        throw error;
+      if (activeTasksRef.current[modelId]) {
+        await cancelDownload(modelId);
       }
-    }
 
-    await removeDownloadedModel(modelId);
+      if (filePath) {
+        try {
+          await FileSystem.deleteAsync(filePath, { idempotent: true });
+        } catch (error) {
+          console.error(`Failed to delete model file for ${modelId}:`, error);
+          throw error;
+        }
+      }
 
-    setDownloadedModelIds((prev) => {
-      const next = { ...prev };
-      delete next[modelId];
-      return next;
-    });
-    setCompletedDownloads((prev) => {
-      const next = { ...prev };
-      delete next[modelId];
-      return next;
-    });
-  }, [cancelDownload]);
+      await removeDownloadedModel(modelId);
+
+      setDownloadedModelIds((prev) => {
+        const next = { ...prev };
+        delete next[modelId];
+        return next;
+      });
+      setCompletedDownloads((prev) => {
+        const next = { ...prev };
+        delete next[modelId];
+        return next;
+      });
+      setActiveDownloadFilenames((prev) => {
+        const next = { ...prev };
+        delete next[modelId];
+        return next;
+      });
+    },
+    [cancelDownload],
+  );
 
   const retreiveCompletedDownloads = async () => {
     /**
@@ -353,6 +382,7 @@ export const useModelDownloader = () => {
     deleteDownloadedModel,
     downloadProgress,
     activeDownloads,
+    activeDownloadFilenames,
     downloadedModelIds,
     completedDownloads,
     syncDownloadedModelIds,

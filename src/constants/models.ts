@@ -16,6 +16,7 @@ export const ModelDetailsLabels = {
   DOWNLOAD: "Download",
   DOWNLOADING: "Downloading",
   STOP: "Stop",
+  DOWNLOADING_FILE: (filename: string) => `Downloading ${filename}`,
   DELETE: "Delete",
   DELETE_TITLE: "Delete model",
   DELETE_MESSAGE: (filename: string) => `Delete "${filename}"? This will remove the model file and its saved metadata.`,

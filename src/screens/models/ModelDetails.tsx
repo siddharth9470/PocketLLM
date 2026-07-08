@@ -38,6 +38,7 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
     deleteDownloadedModel,
     downloadProgress,
     activeDownloads,
+    activeDownloadFilenames,
     completedDownloads,
     syncDownloadedModelIds,
   } = useModelDownloader();
@@ -63,6 +64,7 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
   const { author, name: repoName } = parseModelId(model.id);
   const displayName = model.name && model.name !== model.id ? model.name : repoName;
   const isDownloading = activeDownloads[model.id] ?? false;
+  const downloadingFilename = activeDownloadFilenames[model.id];
   const progress = downloadProgress[model.id] ?? 0;
 
   const isVariantDownloaded = useCallback(
@@ -103,6 +105,7 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
       const sizeLabel =
         item.sizeBytes != null && item.sizeBytes > 0 ? formatFileSize(item.sizeBytes) : ModelDetailsLabels.SIZE_UNKNOWN;
       const isDownloaded = isVariantDownloaded(item.filename);
+      const isThisVariantDownloading = isDownloading && downloadingFilename === item.filename;
 
       return (
         <View style={styles.variantRow}>
@@ -111,29 +114,54 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
               {item.filename}
             </Text>
             <Text style={styles.variantSize}>{sizeLabel}</Text>
+            {isThisVariantDownloading ? (
+              <>
+                <Text style={styles.variantDownloadingLabel}>
+                  {ModelDetailsLabels.DOWNLOADING_FILE(item.filename)} — {Math.round(progress)}%
+                </Text>
+                <View style={styles.variantProgressTrack}>
+                  <View
+                    style={[styles.variantProgressFill, { width: `${Math.min(100, Math.max(0, progress))}%` }]}
+                  />
+                </View>
+              </>
+            ) : null}
           </View>
-          <Pressable
-            style={[
-              isDownloaded ? styles.variantDeleteButton : styles.variantButton,
-              (isDownloading || !variantsReady) && styles.variantButtonDisabled,
-            ]}
-            onPress={() => (isDownloaded ? handleDelete(item) : handleDownload(item))}
-            disabled={isDownloading || !variantsReady}
-            accessibilityRole="button"
-            accessibilityLabel={
-              isDownloaded
-                ? `${ModelDetailsLabels.DELETE} ${item.filename}`
-                : `${ModelDetailsLabels.DOWNLOAD} ${item.filename}`
-            }
-          >
-            <Text style={isDownloaded ? styles.variantDeleteButtonText : styles.variantButtonText}>
-              {isDownloaded ? ModelDetailsLabels.DELETE : ModelDetailsLabels.DOWNLOAD}
-            </Text>
-          </Pressable>
+          {isThisVariantDownloading ? (
+            <TouchableOpacity style={styles.variantStopButton} onPress={() => cancelDownload(model.id)}>
+              <Text style={styles.variantStopButtonText}>{ModelDetailsLabels.STOP}</Text>
+            </TouchableOpacity>
+          ) : (
+            <Pressable
+              style={[isDownloaded ? styles.variantDeleteButton : styles.variantButton, !variantsReady && styles.variantButtonDisabled]}
+              onPress={() => (isDownloaded ? handleDelete(item) : handleDownload(item))}
+              disabled={!variantsReady}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isDownloaded
+                  ? `${ModelDetailsLabels.DELETE} ${item.filename}`
+                  : `${ModelDetailsLabels.DOWNLOAD} ${item.filename}`
+              }
+            >
+              <Text style={isDownloaded ? styles.variantDeleteButtonText : styles.variantButtonText}>
+                {isDownloaded ? ModelDetailsLabels.DELETE : ModelDetailsLabels.DOWNLOAD}
+              </Text>
+            </Pressable>
+          )}
         </View>
       );
     },
-    [handleDelete, handleDownload, isDownloading, isVariantDownloaded, variantsReady],
+    [
+      cancelDownload,
+      downloadingFilename,
+      handleDelete,
+      handleDownload,
+      isDownloading,
+      isVariantDownloaded,
+      model.id,
+      progress,
+      variantsReady,
+    ],
   );
 
   return (
@@ -175,20 +203,6 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
           <TagChip key={`${model.id}-${tag}`} label={tag} />
         ))}
       </ScrollView>
-
-      {isDownloading ? (
-        <View style={styles.progressBlock}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, progress))}%` }]} />
-          </View>
-          <Text style={styles.progressText}>
-            {ModelDetailsLabels.DOWNLOADING} {Math.round(progress)}%
-          </Text>
-          <TouchableOpacity style={styles.stopButton} onPress={() => cancelDownload(model.id)}>
-            <Text style={styles.stopButtonText}>{ModelDetailsLabels.STOP}</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
 
       <Text style={styles.sectionTitle}>{ModelDetailsLabels.VARIANTS}</Text>
 
@@ -267,39 +281,6 @@ const styles = StyleSheet.create({
   tagsContent: {
     paddingRight: spacing.lg,
   },
-  progressBlock: {
-    marginBottom: spacing.lg,
-  },
-  progressTrack: {
-    height: 4,
-    backgroundColor: colors.progressTrack,
-    borderRadius: radii.pill,
-    overflow: "hidden",
-    marginBottom: spacing.sm,
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: colors.primary,
-  },
-  progressText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  stopButton: {
-    minHeight: 44,
-    borderRadius: radii.md,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.danger,
-  },
-  stopButtonText: {
-    ...typography.headline,
-    fontSize: 15,
-    color: colors.danger,
-  },
   sectionTitle: {
     ...typography.headline,
     color: colors.text,
@@ -333,6 +314,36 @@ const styles = StyleSheet.create({
   variantSize: {
     ...typography.caption,
     color: colors.primary,
+    fontWeight: "600",
+  },
+  variantDownloadingLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  variantProgressTrack: {
+    height: 4,
+    backgroundColor: colors.progressTrack,
+    borderRadius: radii.pill,
+    overflow: "hidden",
+    marginTop: spacing.xs,
+  },
+  variantProgressFill: {
+    height: "100%",
+    backgroundColor: colors.primary,
+  },
+  variantStopButton: {
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  variantStopButtonText: {
+    ...typography.caption,
+    color: colors.danger,
     fontWeight: "600",
   },
   variantButton: {
