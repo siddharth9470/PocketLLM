@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
-import { useCallback, useEffect } from "react";
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useCallback, useEffect, useMemo } from "react";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import ModelCard from "@/components/ModelCard";
 import ModelFilterSortSheet from "@/components/ModelFilterSortSheet";
@@ -12,13 +12,28 @@ import { useModelFilterSort } from "@/hooks/useModelFilterSort";
 import type { ModelsStackScreenProps } from "@/navigation/types";
 import { useModelDownloader } from "@/services/useModelDownloader";
 import type { HuggingFaceModel } from "@/types/models";
+import { parseModelId } from "@/utils/parseModelId";
+
+interface ActiveDownloadItem {
+  modelId: string;
+  model: HuggingFaceModel;
+  filename: string;
+  progress: number;
+}
 
 export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
   const isFocused = useIsFocused();
   const { navigation } = props;
 
   const { data: models = [], isLoading, error, refetch, isRefetching } = useHuggingFaceModels();
-  const { downloadedModelIds, syncDownloadedModelIds } = useModelDownloader();
+  const {
+    downloadedModelIds,
+    syncDownloadedModelIds,
+    activeDownloads,
+    activeDownloadFilenames,
+    activeDownloadModels,
+    downloadProgress,
+  } = useModelDownloader();
 
   const {
     displayedModels,
@@ -34,6 +49,26 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
     toggleDownloadedOnly,
     hasActiveFilters,
   } = useModelFilterSort(models, downloadedModelIds);
+
+  const activeDownloadsList = useMemo((): ActiveDownloadItem[] => {
+    return Object.entries(activeDownloads)
+      .filter(([, isActive]) => isActive)
+      .flatMap(([modelId]) => {
+        const model = activeDownloadModels[modelId] ?? models.find((entry) => entry.id === modelId);
+        if (!model) {
+          return [];
+        }
+
+        return [
+          {
+            modelId,
+            model,
+            filename: activeDownloadFilenames[modelId] ?? "",
+            progress: downloadProgress[modelId] ?? 0,
+          },
+        ];
+      });
+  }, [activeDownloadFilenames, activeDownloadModels, activeDownloads, downloadProgress, models]);
 
   useEffect(() => {
     navigation.setOptions({
@@ -62,6 +97,46 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
     ({ item }: { item: HuggingFaceModel }) => <ModelCard model={item} onPress={handleOpenModel} />,
     [handleOpenModel],
   );
+
+  const renderActiveDownloadItem = useCallback(
+    ({ item }: { item: ActiveDownloadItem }) => {
+      const { author, name } = parseModelId(item.model.id);
+      const repoTitle = `${author}/${name}`;
+
+      return (
+        <Pressable
+          style={({ pressed }) => [styles.activeDownloadBanner, pressed && styles.activeDownloadBannerPressed]}
+          onPress={() => handleOpenModel(item.model)}
+          accessibilityRole="button"
+          accessibilityLabel={`${ModelsScreenLabels.ACTIVE_DOWNLOAD_TITLE}: ${repoTitle}`}
+        >
+          <View style={styles.activeDownloadContent}>
+            <View style={styles.activeDownloadHeader}>
+              <Ionicons name="download-outline" size={18} color={colors.primary} />
+              <Text style={styles.activeDownloadTitle}>{ModelsScreenLabels.ACTIVE_DOWNLOAD_TITLE}</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            </View>
+            <Text style={styles.activeDownloadRepo} numberOfLines={1}>
+              {repoTitle}
+            </Text>
+            {item.filename ? (
+              <Text style={styles.activeDownloadVariant} numberOfLines={1}>
+                {ModelsScreenLabels.ACTIVE_DOWNLOAD_PROGRESS(item.filename, item.progress)}
+              </Text>
+            ) : null}
+            <View style={styles.activeDownloadTrack}>
+              <View
+                style={[styles.activeDownloadFill, { width: `${Math.min(100, Math.max(0, item.progress))}%` }]}
+              />
+            </View>
+          </View>
+        </Pressable>
+      );
+    },
+    [handleOpenModel],
+  );
+
+  const activeDownloadKeyExtractor = useCallback((item: ActiveDownloadItem) => item.modelId, []);
 
   if (isLoading) {
     return (
@@ -93,6 +168,22 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
         onTogglePipelineTag={togglePipelineTag}
         onToggleDownloadedOnly={toggleDownloadedOnly}
       />
+
+      {activeDownloadsList.length > 0 ? (
+        <FlatList
+          data={activeDownloadsList}
+          keyExtractor={activeDownloadKeyExtractor}
+          renderItem={renderActiveDownloadItem}
+          scrollEnabled={false}
+          style={styles.activeDownloadsSection}
+          contentContainerStyle={styles.activeDownloadsListContent}
+          ListHeaderComponent={
+            activeDownloadsList.length > 1 ? (
+              <Text style={styles.activeDownloadsSectionTitle}>{ModelsScreenLabels.ACTIVE_DOWNLOADS_TITLE}</Text>
+            ) : null
+          }
+        />
+      ) : null}
 
       <FlatList
         data={displayedModels}
@@ -144,9 +235,71 @@ const styles = StyleSheet.create({
     color: colors.danger,
     textAlign: "center",
   },
+  activeDownloadBanner: {
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primary,
+  },
+  activeDownloadsSection: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+    flexGrow: 0,
+  },
+  activeDownloadsListContent: {
+    flexGrow: 0,
+  },
+  activeDownloadsSectionTitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: "600",
+    marginBottom: spacing.sm,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  activeDownloadBannerPressed: {
+    opacity: 0.92,
+  },
+  activeDownloadContent: {
+    gap: spacing.xs,
+  },
+  activeDownloadHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  activeDownloadTitle: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: "600",
+    flex: 1,
+  },
+  activeDownloadRepo: {
+    ...typography.body,
+    color: colors.text,
+    fontWeight: "600",
+  },
+  activeDownloadVariant: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  activeDownloadTrack: {
+    height: 4,
+    backgroundColor: colors.progressTrack,
+    borderRadius: radii.pill,
+    overflow: "hidden",
+    marginTop: spacing.xs,
+  },
+  activeDownloadFill: {
+    height: "100%",
+    backgroundColor: colors.primary,
+  },
   listContent: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.xxl,
   },
   emptyText: {

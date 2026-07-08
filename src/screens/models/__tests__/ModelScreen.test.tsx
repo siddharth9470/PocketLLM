@@ -9,6 +9,8 @@ jest.mock("@/services/useModelDownloader", () => ({
   useModelDownloader: () => ({
     activeDownloads: {},
     downloadProgress: {},
+    activeDownloadFilenames: {},
+    activeDownloadModels: {},
     downloadedModelIds: {},
     startDownload: jest.fn(),
     cancelDownload: jest.fn(),

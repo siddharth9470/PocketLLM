@@ -4,6 +4,9 @@ export const ModelsScreenLabels = {
   FETCH_ERROR: "Could not load models. Pull down to retry.",
   STOP_DOWNLOADING: "Stop downloading",
   STOP_DOWNLOADING_ACCESSIBILITY: "Stop downloading model",
+  ACTIVE_DOWNLOAD_TITLE: "Downloading model",
+  ACTIVE_DOWNLOADS_TITLE: "Downloading models",
+  ACTIVE_DOWNLOAD_PROGRESS: (filename: string, progress: number) => `${filename} — ${Math.round(progress)}%`,
 } as const;
 
 export const ModelDetailsLabels = {
