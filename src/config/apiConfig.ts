@@ -6,10 +6,11 @@ export const HUGGING_FACE_ENDPOINTS = {
 
 const HUGGING_FACE_MODEL_LIST_SEARCH = {
   search: "gguf",
-  limit: 100,
+  limit: 40,
   sort: "downloads",
   direction: -1,
-  expand: ["author", "pipeline_tag", "siblings", "tags", "likes", "downloads", "gguf"],
+  // Keep list payload light; fetch gguf/blobs only on model details.
+  expand: ["author", "pipeline_tag", "siblings", "tags", "likes", "downloads"],
 } as const;
 
 export function buildHuggingFaceModelListQuery(): string {
