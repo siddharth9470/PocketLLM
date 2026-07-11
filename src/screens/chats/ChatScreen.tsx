@@ -78,14 +78,16 @@ function ChatComposer({ text = "", textInputProps }: ComponentProps<typeof Compo
   );
 
   const placeholder = textInputProps?.placeholder ?? ChatScreenLabels.COMPOSER_PLACEHOLDER;
+  const accessibilityLabel =
+    textInputProps?.accessibilityLabel ?? (placeholder.length > 0 ? placeholder : ChatScreenLabels.MODEL_SELECT_PROMPT);
 
   return (
     <View style={styles.composerContainer}>
       <TextInput
         {...textInputProps}
-        testID={placeholder}
+        testID={placeholder.length > 0 ? placeholder : ChatScreenLabels.COMPOSER_PLACEHOLDER}
         accessible
-        accessibilityLabel={placeholder}
+        accessibilityLabel={accessibilityLabel}
         value={text}
         multiline
         scrollEnabled={inputHeight >= COMPOSER_MAX_HEIGHT}
@@ -128,6 +130,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   const [pendingAttachments, setPendingAttachments] = useState<PersistedAttachmentDraft[]>([]);
   const [attachmentMenuVisible, setAttachmentMenuVisible] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [isLoadingModel, setIsLoadingModel] = useState(false);
 
   const voiceRecordingRef = useRef<Audio.Recording | null>(null);
   const isMountedRef = useRef(true);
@@ -265,8 +268,8 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     [conversationId, isModelReady, isSending, pendingAttachments, selectedModelId, sendMessage, showInferenceError],
   );
 
-  const removePendingAttachment = useCallback((index: number) => {
-    setPendingAttachments((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+  const removePendingAttachment = useCallback((storagePath: string) => {
+    setPendingAttachments((prev) => prev.filter((attachment) => attachment.storagePath !== storagePath));
   }, []);
 
   const handlePickImage = useCallback(async () => {
@@ -322,8 +325,8 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
       <View style={styles.inputToolbarContainer}>
         {pendingAttachments.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pendingAttachmentScroll}>
-            {pendingAttachments.map((attachment, index) => (
-              <View key={`${attachment.storagePath}-${index}`} style={styles.pendingAttachmentChip}>
+            {pendingAttachments.map((attachment) => (
+              <View key={attachment.storagePath} style={styles.pendingAttachmentChip}>
                 <Ionicons
                   name={attachment.kind === "image" ? "image-outline" : "musical-notes-outline"}
                   size={14}
@@ -333,7 +336,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
                   {attachment.kind === "image" ? "Image" : "Audio"}
                 </Text>
                 <Pressable
-                  onPress={() => removePendingAttachment(index)}
+                  onPress={() => removePendingAttachment(attachment.storagePath)}
                   hitSlop={8}
                   accessibilityRole="button"
                   accessibilityLabel={ChatScreenLabels.ATTACHMENT_REMOVE}
@@ -397,34 +400,50 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
   const renderComposer = useCallback((props: ComponentProps<typeof Composer>) => <ChatComposer {...props} />, []);
 
-  const composerTextInputProps = useMemo(
-    () => ({
+  const composerTextInputProps = useMemo(() => {
+    const placeholder = isModelReady
+      ? ChatScreenLabels.COMPOSER_PLACEHOLDER
+      : isLoadingModel
+        ? ChatScreenLabels.MODEL_LOADING
+        : "";
+
+    const accessibilityLabel = isModelReady
+      ? ChatScreenLabels.COMPOSER_PLACEHOLDER
+      : isLoadingModel
+        ? ChatScreenLabels.MODEL_LOADING
+        : ChatScreenLabels.MODEL_SELECT_PROMPT;
+
+    return {
       editable: isModelReady,
-      placeholder: isModelReady ? ChatScreenLabels.COMPOSER_PLACEHOLDER : ChatScreenLabels.MODEL_REQUIRED,
+      placeholder,
+      accessibilityLabel,
       placeholderTextColor: colors.textSecondary,
-    }),
-    [isModelReady],
-  );
+    };
+  }, [isLoadingModel, isModelReady]);
 
   const handleSelectModel = useCallback(
     async (model: HuggingFaceModel) => {
-      const modelPath = await resolveDownloadedModelPath(model.id);
-      if (!modelPath) {
-        showInferenceError(ChatScreenLabels.MODEL_UNAVAILABLE);
-        return;
-      }
+      setIsLoadingModel(true);
+      setSelectedModelId(model.id);
+      setIsModelPickerVisible(false);
 
       try {
-        await initializeModel(modelPath);
-      } catch (error) {
-        showInferenceError(classifyInferenceError(error).userMessage);
-        return;
-      }
+        const modelPath = await resolveDownloadedModelPath(model.id);
+        if (!modelPath) {
+          setSelectedModelId(undefined);
+          showInferenceError(ChatScreenLabels.MODEL_UNAVAILABLE);
+          return;
+        }
 
-      setSelectedModelId(model.id);
-      setReadyModelIds((prev) => new Set(prev).add(model.id));
-      setIsModelPickerVisible(false);
-      void setConversationModel(conversationId, model.id);
+        await initializeModel(modelPath);
+        setReadyModelIds((prev) => new Set(prev).add(model.id));
+        void setConversationModel(conversationId, model.id);
+      } catch (error) {
+        setSelectedModelId(undefined);
+        showInferenceError(classifyInferenceError(error).userMessage);
+      } finally {
+        setIsLoadingModel(false);
+      }
     },
     [conversationId, setConversationModel, showInferenceError],
   );

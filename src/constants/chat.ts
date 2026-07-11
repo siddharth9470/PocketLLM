@@ -9,7 +9,7 @@ export const ChatScreenLabels = {
   DELETE_CHAT_ACCESSIBILITY: "Delete chat",
   NEW_CHAT_TITLE: "New Chat",
   COMPOSER_PLACEHOLDER: "Type a message...",
-  MODEL_REQUIRED: "Select a downloaded model to start chatting.",
+  MODEL_LOADING: "Loading a model.",
   MODEL_SELECT_TITLE: "Select a Model",
   MODEL_SELECT_PROMPT: "Choose a downloaded model before sending messages.",
   MODEL_UNAVAILABLE: "The selected model is no longer available on this device.",
