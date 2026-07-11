@@ -110,6 +110,7 @@ jest.mock("react-native-gesture-handler", () => {
 
 const GIFTED_CHAT_SEND_TEST_ID = "GC_SEND_TOUCHABLE";
 const MOCK_MODEL = buildCompletedModel();
+const MOCK_MODEL_PATH = "/mock/path.gguf";
 const MOCK_USER_PROMPT = "What is on-device inference?";
 const MOCK_ASSISTANT_RESPONSE = "On-device inference runs the model locally on your phone.";
 
@@ -247,7 +248,7 @@ describe("ChatScreen", () => {
     mockExecute.mockResolvedValue({ rows: [], rowsAffected: 1 });
 
     jest.mocked(getDownloadedModelsList).mockResolvedValue([MOCK_MODEL]);
-    jest.mocked(resolveDownloadedModelPath).mockResolvedValue("/mock/path.gguf");
+    jest.mocked(resolveDownloadedModelPath).mockResolvedValue(MOCK_MODEL_PATH);
     jest.mocked(initializeModel).mockResolvedValue(undefined);
     jest.mocked(releaseModel).mockResolvedValue(undefined);
     jest.mocked(runInference).mockResolvedValue({ text: MOCK_ASSISTANT_RESPONSE, truncated: false });
@@ -299,7 +300,7 @@ describe("Messaging pipeline and database sync", () => {
     installTrackedSqlMock();
 
     jest.mocked(getDownloadedModelsList).mockResolvedValue([MOCK_MODEL]);
-    jest.mocked(resolveDownloadedModelPath).mockResolvedValue("/mock/path.gguf");
+    jest.mocked(resolveDownloadedModelPath).mockResolvedValue(MOCK_MODEL_PATH);
     jest.mocked(initializeModel).mockResolvedValue(undefined);
     jest.mocked(releaseModel).mockResolvedValue(undefined);
     jest.mocked(runInference).mockResolvedValue({ text: MOCK_ASSISTANT_RESPONSE, truncated: false });

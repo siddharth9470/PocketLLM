@@ -13,6 +13,15 @@ export const ChatScreenLabels = {
   MODEL_SELECT_TITLE: "Select a Model",
   MODEL_SELECT_PROMPT: "Choose a downloaded model before sending messages.",
   MODEL_UNAVAILABLE: "The selected model is no longer available on this device.",
+  ATTACHMENT_ADD: "Add attachment",
+  ATTACHMENT_IMAGE: "Photo library",
+  ATTACHMENT_AUDIO: "Audio file",
+  ATTACHMENT_RECORD: "Record voice",
+  ATTACHMENT_RECORDING: "Recording…",
+  ATTACHMENT_REMOVE: "Remove attachment",
+  AUDIO_DEFAULT_PROMPT:
+    "Listen to the attached audio. Transcribe it, translate to English if needed, then answer helpfully.",
+  ATTACHMENT_ERROR_TITLE: "Attachment Failed",
   MODEL_INVALID_WEIGHTS:
     "This file is not a text-generation model (it may be a vision projector). Delete it and re-download from the Models tab.",
   INFERENCE_FAILED: "Sorry, something went wrong generating a response.",

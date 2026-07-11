@@ -15,13 +15,17 @@ import {
   conversationExists,
   createConversation,
   createMessage,
+  createMessageAttachments,
   deleteConversation,
+  getAttachmentStoragePathsByConversationId,
   getConversationById,
   getConversations,
   getMessagesByConversationId,
   updateConversation,
   updateMessage,
 } from "@/db/ChatDB";
+import type { PersistedAttachmentDraft } from "@/services/chatAttachments";
+import { deleteAttachmentFiles } from "@/services/chatAttachments";
 import {
   buildChatContextFromHistory,
   classifyInferenceError,
@@ -29,13 +33,14 @@ import {
   runContinueInference,
   runInference,
 } from "@/services/chatHelper";
-import type { ChatMessage, Conversation } from "@/types/chat";
+import type { ChatMessage, ChatMessageAttachment, Conversation } from "@/types/chat";
 import { deriveConversationTitle, generateChatId } from "@/utils/chatIds";
 import { buildConversationPreview } from "@/utils/conversationPreview";
 import { stripReasoningTags } from "@/utils/reasoningFilter";
 
 interface SendMessageOptions {
   modelId: string;
+  attachmentDrafts?: PersistedAttachmentDraft[];
   onInferenceError?: (message: string) => void;
 }
 
@@ -59,7 +64,11 @@ const STREAMING_UI_INTERVAL_MS = 48;
 
 const ChatStoreContext = createContext<ChatStore | undefined>(undefined);
 
-function buildUserMessage(conversationId: string, content: string): ChatMessage {
+function buildUserMessage(
+  conversationId: string,
+  content: string,
+  attachments?: ChatMessageAttachment[],
+): ChatMessage {
   return {
     id: generateChatId(),
     conversationId,
@@ -67,7 +76,33 @@ function buildUserMessage(conversationId: string, content: string): ChatMessage 
     content,
     status: "completed",
     createdAt: new Date().toISOString(),
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
   };
+}
+
+/** Maps persisted attachment drafts into normalized rows for the message_attachments table. */
+function buildAttachmentRows(
+  messageId: string,
+  conversationId: string,
+  drafts: PersistedAttachmentDraft[],
+): ChatMessageAttachment[] {
+  const createdAt = new Date().toISOString();
+
+  return drafts.map((draft, index) => ({
+    id: generateChatId(),
+    messageId,
+    conversationId,
+    kind: draft.kind,
+    storagePath: draft.storagePath,
+    mimeType: draft.mimeType,
+    fileSizeBytes: draft.fileSizeBytes,
+    sortOrder: index,
+    createdAt,
+    ...(draft.originalFileName ? { originalFileName: draft.originalFileName } : {}),
+    ...(draft.width != null ? { width: draft.width } : {}),
+    ...(draft.height != null ? { height: draft.height } : {}),
+    ...(draft.durationMs != null ? { durationMs: draft.durationMs } : {}),
+  }));
 }
 
 function buildAssistantMessage(
@@ -250,8 +285,16 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
   const sendMessage = useCallback(
     async (conversationId: string, content: string, options: SendMessageOptions) => {
+      const attachmentDrafts = options.attachmentDrafts ?? [];
       const trimmed = content.trim();
-      if (!trimmed) {
+      const messageText =
+        trimmed.length > 0
+          ? trimmed
+          : attachmentDrafts.length > 0
+            ? ChatScreenLabels.AUDIO_DEFAULT_PROMPT
+            : "";
+
+      if (!messageText) {
         return;
       }
 
@@ -268,11 +311,11 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         const exists = await conversationExists(conversationId);
 
         if (!exists) {
-          const title = deriveConversationTitle(trimmed);
+          const title = deriveConversationTitle(messageText);
           const newConversation: Conversation = {
             id: conversationId,
             title,
-            preview: trimmed,
+            preview: messageText,
             modelId: options.modelId,
             createdAt: now,
             updatedAt: now,
@@ -287,9 +330,18 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        const userMessage = buildUserMessage(conversationId, trimmed);
+        const userMessage = buildUserMessage(conversationId, messageText);
+        const attachmentRows = buildAttachmentRows(userMessage.id, conversationId, attachmentDrafts);
+        if (attachmentRows.length > 0) {
+          userMessage.attachments = attachmentRows;
+        }
+
         await createMessage(userMessage);
-        await updateConversation(conversationId, { preview: trimmed, updatedAt: now });
+        if (attachmentRows.length > 0) {
+          await createMessageAttachments(attachmentRows);
+        }
+
+        await updateConversation(conversationId, { preview: messageText, updatedAt: now });
 
         if (isConversationFocused(conversationId)) {
           setConversationDetails((prev) => {
@@ -303,7 +355,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
               [conversationId]: {
                 ...current,
                 modelId: options.modelId,
-                preview: trimmed,
+                preview: messageText,
                 updatedAt: now,
                 messages: [...(current.messages ?? []), userMessage],
               },
@@ -617,7 +669,12 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
   );
 
   const deleteConversationById = useCallback(async (conversationId: string): Promise<void> => {
+    const attachmentPaths = await getAttachmentStoragePathsByConversationId(conversationId);
     await deleteConversation(conversationId);
+
+    if (attachmentPaths.length > 0) {
+      await deleteAttachmentFiles(attachmentPaths);
+    }
 
     setConversations((prev) => prev.filter((conversation) => conversation.id !== conversationId));
     setConversationDetails((prev) => {

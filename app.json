@@ -28,6 +28,22 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-asset", ["llama.rn"], "@kesha-antonov/react-native-background-downloader"]
+    "plugins": [
+      "expo-asset",
+      ["llama.rn"],
+      "@kesha-antonov/react-native-background-downloader",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow PocketLLM to access photos for chat attachments."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow PocketLLM to record voice messages in chat."
+        }
+      ]
+    ]
   }
 }
