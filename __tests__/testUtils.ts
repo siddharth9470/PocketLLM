@@ -1,3 +1,5 @@
+/// <reference types="jest" />
+
 import type { UseQueryResult } from "@tanstack/react-query";
 
 import { ChatScreenLabels } from "@/constants/chat";
@@ -13,15 +15,16 @@ export type MockChatStore = {
   isLoadingConversations: boolean;
   conversationDetails: Record<string, Conversation>;
   isSending: boolean;
-  refreshConversations: jest.Mock;
-  loadConversation: jest.Mock;
-  getConversation: jest.Mock;
-  sendMessage: jest.Mock;
-  continueAssistantMessage: jest.Mock;
-  setConversationModel: jest.Mock;
-  setActiveConversationId: jest.Mock;
-  createConversationId: jest.Mock;
-  deleteConversation: jest.Mock;
+  refreshConversations: jest.MockedFunction<() => Promise<void>>;
+  loadConversation: jest.MockedFunction<(conversationId: string) => Promise<Conversation | null>>;
+  getConversation: jest.MockedFunction<(conversationId: string) => Conversation | undefined>;
+  sendMessage: jest.MockedFunction<
+    (conversationId: string, content: string, options: unknown) => Promise<void>
+  >;
+  setConversationModel: jest.MockedFunction<(conversationId: string, modelId: string) => Promise<void>>;
+  setActiveConversationId: jest.MockedFunction<(conversationId: string | null) => void>;
+  createConversationId: jest.MockedFunction<() => string>;
+  deleteConversation: jest.MockedFunction<(conversationId: string) => Promise<void>>;
 };
 
 export function mockChatStore(overrides: Partial<MockChatStore> = {}): MockChatStore {
@@ -36,7 +39,6 @@ export function mockChatStore(overrides: Partial<MockChatStore> = {}): MockChatS
     loadConversation: jest.fn().mockResolvedValue(null),
     getConversation: jest.fn(),
     sendMessage: jest.fn().mockResolvedValue(undefined),
-    continueAssistantMessage: jest.fn().mockResolvedValue(undefined),
     setConversationModel: jest.fn().mockResolvedValue(undefined),
     setActiveConversationId: jest.fn(),
     createConversationId: jest.fn(() => MOCK_NEW_CONVERSATION_ID),

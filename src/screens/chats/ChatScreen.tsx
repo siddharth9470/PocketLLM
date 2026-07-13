@@ -39,16 +39,12 @@ import {
   pickAndPersistImage,
   startVoiceRecording,
 } from "@/services/chatAttachments";
-import {
-  classifyInferenceError,
-  initializeModel,
-  resolveDownloadedModelPath,
-} from "@/services/chatHelper";
+import { initializeModel, resolveDownloadedModelPath } from "@/services/chatHelper";
 import { useChatStore } from "@/stores/chatStore";
 import type { HuggingFaceModel } from "@/types/models";
 import { generateChatId } from "@/utils/chatIds";
 import { isLanguageModelGgufFilename } from "@/utils/ggufFileSelection";
-import { CHAT_ASSISTANT, CHAT_USER, type PocketChatMessage, toGiftedChatMessages } from "@/utils/giftedChatAdapter";
+import { CHAT_USER, type PocketChatMessage, toGiftedChatMessages } from "@/utils/giftedChatAdapter";
 
 const COMPOSER_LINE_HEIGHT = 22;
 const COMPOSER_VERTICAL_PADDING = spacing.sm * 2;
@@ -116,7 +112,6 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   const conversation = useChatStore((state) => state.conversationDetails[conversationId]);
   const loadConversation = useChatStore((state) => state.loadConversation);
   const sendMessage = useChatStore((state) => state.sendMessage);
-  const continueAssistantMessage = useChatStore((state) => state.continueAssistantMessage);
   const setConversationModel = useChatStore((state) => state.setConversationModel);
   const setActiveConversationId = useChatStore((state) => state.setActiveConversationId);
   const isSending = useChatStore((state) => state.isSending);
@@ -175,7 +170,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
   const isModelReady = Boolean(selectedModelId && readyModelIds.has(selectedModelId));
 
-  const showInferenceError = useCallback((message: string) => {
+  const showChatError = useCallback((message: string) => {
     Alert.alert(ChatScreenLabels.INFERENCE_ERROR_TITLE, message);
   }, []);
 
@@ -252,13 +247,6 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
   const giftedMessages = useMemo(() => toGiftedChatMessages(conversation?.messages ?? []), [conversation?.messages]);
 
-  const hasStreamingContent = useMemo(
-    () =>
-      conversation?.messages?.some((message) => message.status === "streaming" && message.content.trim().length > 0) ??
-      false,
-    [conversation?.messages],
-  );
-
   const handleSend = useCallback(
     (messages: IMessage[] = []) => {
       if (isSending || !isModelReady || !selectedModelId) {
@@ -279,21 +267,11 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
       void sendMessage(conversationId, text, {
         modelId: selectedModelId,
-        modelPath: selectedModelPath,
         attachmentDrafts: drafts,
-        onInferenceError: showInferenceError,
+        onSendError: showChatError,
       });
     },
-    [
-      conversationId,
-      isModelReady,
-      isSending,
-      pendingAttachments,
-      selectedModelId,
-      selectedModelPath,
-      sendMessage,
-      showInferenceError,
-    ],
+    [conversationId, isModelReady, isSending, pendingAttachments, selectedModelId, sendMessage, showChatError],
   );
 
   const removePendingAttachment = useCallback((storagePath: string) => {
@@ -308,9 +286,9 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         setPendingAttachments((prev) => [...prev, draft]);
       }
     } catch (error) {
-      showInferenceError(error instanceof Error ? error.message : ChatScreenLabels.ATTACHMENT_ERROR_TITLE);
+      showChatError(error instanceof Error ? error.message : ChatScreenLabels.ATTACHMENT_ERROR_TITLE);
     }
-  }, [conversationId, showInferenceError]);
+  }, [conversationId, showChatError]);
 
   const handlePickAudio = useCallback(async () => {
     setAttachmentMenuVisible(false);
@@ -320,9 +298,9 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         setPendingAttachments((prev) => [...prev, draft]);
       }
     } catch (error) {
-      showInferenceError(error instanceof Error ? error.message : ChatScreenLabels.ATTACHMENT_ERROR_TITLE);
+      showChatError(error instanceof Error ? error.message : ChatScreenLabels.ATTACHMENT_ERROR_TITLE);
     }
-  }, [conversationId, showInferenceError]);
+  }, [conversationId, showChatError]);
 
   const handleToggleVoiceRecording = useCallback(async () => {
     if (isRecordingVoice && voiceRecordingRef.current) {
@@ -334,7 +312,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
       } catch (error) {
         voiceRecordingRef.current = null;
         setIsRecordingVoice(false);
-        showInferenceError(error instanceof Error ? error.message : ChatScreenLabels.ATTACHMENT_ERROR_TITLE);
+        showChatError(error instanceof Error ? error.message : ChatScreenLabels.ATTACHMENT_ERROR_TITLE);
       }
       return;
     }
@@ -344,9 +322,9 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
       voiceRecordingRef.current = recording;
       setIsRecordingVoice(true);
     } catch (error) {
-      showInferenceError(error instanceof Error ? error.message : ChatScreenLabels.ATTACHMENT_ERROR_TITLE);
+      showChatError(error instanceof Error ? error.message : ChatScreenLabels.ATTACHMENT_ERROR_TITLE);
     }
-  }, [conversationId, isRecordingVoice, showInferenceError]);
+  }, [conversationId, isRecordingVoice, showChatError]);
 
   const renderInputToolbar = useCallback(
     (props: ComponentProps<typeof InputToolbar>) => (
@@ -459,7 +437,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         const modelPath = await resolveDownloadedModelPath(model.id);
         if (!modelPath) {
           setSelectedModelId(undefined);
-          showInferenceError(ChatScreenLabels.MODEL_UNAVAILABLE);
+          showChatError(ChatScreenLabels.MODEL_UNAVAILABLE);
           return;
         }
 
@@ -469,12 +447,12 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         void setConversationModel(conversationId, model.id);
       } catch (error) {
         setSelectedModelId(undefined);
-        showInferenceError(classifyInferenceError(error).userMessage);
+        showChatError(error instanceof Error ? error.message : ChatScreenLabels.MODEL_INIT_FAILED);
       } finally {
         setIsLoadingModel(false);
       }
     },
-    [conversationId, setConversationModel, showInferenceError],
+    [conversationId, setConversationModel, showChatError],
   );
 
   const renderSend = useCallback(
@@ -495,29 +473,6 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     [isModelReady, pendingAttachments.length],
   );
 
-  const handleContinueResponse = useCallback(
-    (messageId: string) => {
-      if (isSending || !isModelReady || !selectedModelId) {
-        return;
-      }
-
-      void continueAssistantMessage(conversationId, messageId, {
-        modelId: selectedModelId,
-        modelPath: selectedModelPath,
-        onInferenceError: showInferenceError,
-      });
-    },
-    [
-      continueAssistantMessage,
-      conversationId,
-      isModelReady,
-      isSending,
-      selectedModelId,
-      selectedModelPath,
-      showInferenceError,
-    ],
-  );
-
   const renderMessageText = useCallback((props: MessageTextProps<PocketChatMessage>) => {
     const text = props.currentMessage?.text;
     if (!text) {
@@ -528,34 +483,16 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   }, []);
 
   const renderBubble = useCallback(
-    (props: ComponentProps<typeof Bubble>) => {
-      const currentMessage = props.currentMessage as PocketChatMessage | undefined;
-      const showContinue =
-        currentMessage?.truncated === true && currentMessage.user._id === CHAT_ASSISTANT._id && !isSending;
-
-      return (
-        <View style={styles.bubbleContainer}>
-          <Bubble
-            {...props}
-            wrapperStyle={{
-              left: styles.assistantBubble,
-              right: styles.userBubble,
-            }}
-          />
-          {showContinue ? (
-            <Pressable
-              style={styles.continueButton}
-              onPress={() => handleContinueResponse(String(currentMessage._id))}
-              accessibilityRole="button"
-              accessibilityLabel={ChatScreenLabels.CONTINUE_RESPONSE_ACCESSIBILITY}
-            >
-              <Text style={styles.continueButtonText}>{ChatScreenLabels.CONTINUE_RESPONSE}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      );
-    },
-    [handleContinueResponse, isSending],
+    (props: ComponentProps<typeof Bubble>) => (
+      <Bubble
+        {...props}
+        wrapperStyle={{
+          left: styles.assistantBubble,
+          right: styles.userBubble,
+        }}
+      />
+    ),
+    [],
   );
 
   if (isInitialLoad && conversation === undefined) {
@@ -601,7 +538,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
             isSendButtonAlwaysVisible
             renderAvatar={() => null}
             isUserAvatarVisible={false}
-            isTyping={isSending && !hasStreamingContent}
+            isTyping={isSending}
             messagesContainerStyle={styles.messagesContainer}
             textInputProps={composerTextInputProps}
             keyboardAvoidingViewProps={{
@@ -767,26 +704,5 @@ const styles = StyleSheet.create({
   assistantBubble: {
     backgroundColor: colors.assistantBubble,
     borderBottomLeftRadius: radii.sm,
-  },
-  bubbleContainer: {
-    maxWidth: "100%",
-  },
-  continueButton: {
-    alignSelf: "flex-start",
-    marginTop: spacing.xs,
-    marginLeft: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    backgroundColor: colors.chipBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.primary,
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  continueButtonText: {
-    ...typography.caption,
-    color: colors.primary,
-    fontWeight: "600",
   },
 });

@@ -1,18 +1,12 @@
 /**
- * Public inference API barrel.
- * Implementation is split across `src/services/inference/` by responsibility.
+ * Public llama.rn runtime API barrel.
+ * Model load/release lives in `src/services/inference/llamaRuntime.ts`.
  */
 
 export {
-  type ChatCompletionResult,
-  type InferenceOptions,
-  type InferenceTokenHandler,
-  runContinueInference,
-  runInference,
-} from "@/services/inference/chatCompletion";
-export { buildChatContextFromHistory, buildContinuationContext } from "@/services/inference/chatContext";
-export { classifyInferenceError, type InferenceErrorInfo } from "@/services/inference/inferenceErrors";
-export {
+  getActiveContext,
+  getCachedJinjaSupported,
+  getContextWindowSize,
   initializeModel,
   releaseModel,
   releaseModelForPath,
