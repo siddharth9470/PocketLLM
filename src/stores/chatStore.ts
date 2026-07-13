@@ -40,6 +40,8 @@ import { stripReasoningTags } from "@/utils/reasoningFilter";
 
 interface SendMessageOptions {
   modelId: string;
+  /** Pre-resolved GGUF path; avoids a DB round-trip on every send when provided. */
+  modelPath?: string;
   attachmentDrafts?: PersistedAttachmentDraft[];
   onInferenceError?: (message: string) => void;
 }
@@ -60,7 +62,7 @@ interface ChatStore {
   sendMessage: (conversationId: string, content: string, options: SendMessageOptions) => Promise<void>;
 }
 
-const STREAMING_UI_INTERVAL_MS = 48;
+const STREAMING_UI_INTERVAL_MS = 32;
 
 const ChatStoreContext = createContext<ChatStore | undefined>(undefined);
 
@@ -162,6 +164,8 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
   const [isSending, setIsSending] = useState(false);
 
   const focusedConversationIdRef = useRef<string | null>(null);
+  const conversationDetailsRef = useRef<Record<string, Conversation>>({});
+  conversationDetailsRef.current = conversationDetails;
 
   const isConversationFocused = useCallback((conversationId: string): boolean => {
     return focusedConversationIdRef.current === conversationId;
@@ -298,21 +302,59 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const modelPath = await resolveDownloadedModelPath(options.modelId);
+      const modelPath = options.modelPath ?? (await resolveDownloadedModelPath(options.modelId));
       if (!modelPath) {
         options.onInferenceError?.(ChatScreenLabels.MODEL_UNAVAILABLE);
         return;
       }
 
+      const now = new Date().toISOString();
+      const userMessage = buildUserMessage(conversationId, messageText);
+      const attachmentRows = buildAttachmentRows(userMessage.id, conversationId, attachmentDrafts);
+      if (attachmentRows.length > 0) {
+        userMessage.attachments = attachmentRows;
+      }
+
+      const assistantMessageId = generateChatId();
+      const assistantCreatedAt = new Date().toISOString();
+      const cachedConversation = conversationDetailsRef.current[conversationId];
+      const priorMessages = cachedConversation?.messages ?? [];
+      const historyForContext = [...priorMessages, userMessage];
+      const contextMessages = buildChatContextFromHistory(historyForContext);
+
       setIsSending(true);
 
-      try {
-        const now = new Date().toISOString();
+      if (isConversationFocused(conversationId)) {
+        setConversationDetails((prev) => {
+          const current = prev[conversationId] ?? buildNewChatPlaceholder(conversationId);
+          const streamingMessage: ChatMessage = {
+            id: assistantMessageId,
+            conversationId,
+            role: "assistant",
+            content: "",
+            status: "streaming",
+            createdAt: assistantCreatedAt,
+          };
+
+          return {
+            ...prev,
+            [conversationId]: {
+              ...current,
+              modelId: options.modelId,
+              preview: messageText,
+              updatedAt: now,
+              messages: [...(current.messages ?? []), userMessage, streamingMessage],
+            },
+          };
+        });
+      }
+
+      const persistUserTurn = async (): Promise<void> => {
         const exists = await conversationExists(conversationId);
 
         if (!exists) {
           const title = deriveConversationTitle(messageText);
-          const newConversation: Conversation = {
+          await createConversation({
             id: conversationId,
             title,
             preview: messageText,
@@ -320,20 +362,12 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
             createdAt: now,
             updatedAt: now,
             messages: [],
-          };
-
-          await createConversation(newConversation);
+          });
         } else {
           await updateConversation(conversationId, {
             modelId: options.modelId,
             updatedAt: now,
           });
-        }
-
-        const userMessage = buildUserMessage(conversationId, messageText);
-        const attachmentRows = buildAttachmentRows(userMessage.id, conversationId, attachmentDrafts);
-        if (attachmentRows.length > 0) {
-          userMessage.attachments = attachmentRows;
         }
 
         await createMessage(userMessage);
@@ -342,126 +376,101 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         }
 
         await updateConversation(conversationId, { preview: messageText, updatedAt: now });
+      };
 
-        if (isConversationFocused(conversationId)) {
-          setConversationDetails((prev) => {
-            const current = prev[conversationId];
-            if (!current) {
-              return prev;
-            }
+      const persistTask = persistUserTurn();
 
-            return {
-              ...prev,
-              [conversationId]: {
-                ...current,
-                modelId: options.modelId,
-                preview: messageText,
-                updatedAt: now,
-                messages: [...(current.messages ?? []), userMessage],
-              },
-            };
-          });
+      const appendStreamingContent = (streamContent: string): void => {
+        if (!isConversationFocused(conversationId)) {
+          return;
         }
 
-        const history = await getMessagesByConversationId(conversationId);
-        const contextMessages = buildChatContextFromHistory(history);
-
-        const assistantMessageId = generateChatId();
-        const assistantCreatedAt = new Date().toISOString();
-
-        const appendStreamingPlaceholder = (content: string): void => {
-          if (!isConversationFocused(conversationId)) {
-            return;
+        setConversationDetails((prev) => {
+          const current = prev[conversationId];
+          if (!current) {
+            return prev;
           }
 
-          setConversationDetails((prev) => {
-            const current = prev[conversationId];
-            if (!current) {
-              return prev;
-            }
-
-            const messages = current.messages ?? [];
-            const existingIndex = messages.findIndex((message) => message.id === assistantMessageId);
-
-            if (existingIndex === -1) {
-              const streamingMessage: ChatMessage = {
-                id: assistantMessageId,
-                conversationId,
-                role: "assistant",
-                content,
-                status: "streaming",
-                createdAt: assistantCreatedAt,
-              };
-
-              return {
-                ...prev,
-                [conversationId]: {
-                  ...current,
-                  messages: [...messages, streamingMessage],
-                },
-              };
-            }
-
-            const updatedMessages = [...messages];
-            updatedMessages[existingIndex] = {
-              ...updatedMessages[existingIndex],
-              content,
-              status: "streaming",
-            };
-
-            return {
-              ...prev,
-              [conversationId]: {
-                ...current,
-                messages: updatedMessages,
-              },
-            };
-          });
-        };
-
-        let lastStreamUiFlushAt = 0;
-
-        const onToken = (displayText: string): void => {
-          const now = Date.now();
-          if (now - lastStreamUiFlushAt < STREAMING_UI_INTERVAL_MS) {
-            return;
+          const messages = current.messages ?? [];
+          const existingIndex = messages.findIndex((message) => message.id === assistantMessageId);
+          if (existingIndex === -1) {
+            return prev;
           }
 
-          lastStreamUiFlushAt = now;
-          appendStreamingPlaceholder(displayText);
-        };
+          const updatedMessages = [...messages];
+          updatedMessages[existingIndex] = {
+            ...updatedMessages[existingIndex],
+            content: streamContent,
+            status: "streaming",
+          };
 
-        let assistantContent: string = ChatScreenLabels.INFERENCE_FAILED;
-        let assistantStatus: ChatMessage["status"] = "completed";
-        let assistantError: string | undefined;
-        let assistantMetrics: ChatMessage["metrics"] | undefined;
-        let assistantTruncated = false;
+          return {
+            ...prev,
+            [conversationId]: {
+              ...current,
+              messages: updatedMessages,
+            },
+          };
+        });
+      };
 
-        try {
-          const completion = await runInference(modelPath, contextMessages, onToken);
-          assistantContent = completion.text.trim() || ChatScreenLabels.INFERENCE_FAILED;
-          assistantMetrics = completion.metrics;
-          assistantTruncated = completion.truncated === true;
-          appendStreamingPlaceholder(assistantContent);
-        } catch (error) {
-          const classified = classifyInferenceError(error);
-          assistantStatus = "error";
-          assistantError = classified.logMessage;
-          assistantContent = classified.userMessage;
-          console.error("Assistant inference failed:", error);
-          options.onInferenceError?.(classified.userMessage);
+      let lastStreamUiFlushAt = 0;
+
+      const onToken = (displayText: string): void => {
+        const tick = Date.now();
+        if (tick - lastStreamUiFlushAt < STREAMING_UI_INTERVAL_MS) {
+          return;
         }
 
-        const assistantMessage = buildAssistantMessage(
-          conversationId,
-          assistantContent,
-          assistantStatus,
-          assistantMetrics,
-          assistantError,
-          assistantMessageId,
-          assistantTruncated,
-        );
+        lastStreamUiFlushAt = tick;
+        appendStreamingContent(displayText);
+      };
 
+      let assistantContent: string = ChatScreenLabels.INFERENCE_FAILED;
+      let assistantStatus: ChatMessage["status"] = "completed";
+      let assistantError: string | undefined;
+      let assistantMetrics: ChatMessage["metrics"] | undefined;
+      let assistantTruncated = false;
+
+      try {
+        const completion = await runInference(modelPath, contextMessages, onToken, {
+          userPromptLength: messageText.length,
+        });
+        assistantContent = completion.text.trim() || ChatScreenLabels.INFERENCE_FAILED;
+        assistantMetrics = completion.metrics;
+        assistantTruncated = completion.truncated === true;
+        appendStreamingContent(assistantContent);
+      } catch (error) {
+        const classified = classifyInferenceError(error);
+        assistantStatus = "error";
+        assistantError = classified.logMessage;
+        assistantContent = classified.userMessage;
+        console.error("Assistant inference failed:", error);
+        appendStreamingContent(assistantContent);
+        options.onInferenceError?.(classified.userMessage);
+      }
+
+      try {
+        await persistTask;
+      } catch (error) {
+        console.error("Failed to persist user message:", error);
+        options.onInferenceError?.(ChatScreenLabels.INFERENCE_FAILED);
+        return;
+      } finally {
+        setIsSending(false);
+      }
+
+      const assistantMessage = buildAssistantMessage(
+        conversationId,
+        assistantContent,
+        assistantStatus,
+        assistantMetrics,
+        assistantError,
+        assistantMessageId,
+        assistantTruncated,
+      );
+
+      try {
         await createMessage(assistantMessage);
 
         const responseTimestamp = new Date().toISOString();
@@ -479,17 +488,8 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
             const messages = current.messages ?? [];
             const existingIndex = messages.findIndex((message) => message.id === assistantMessageId);
-
             if (existingIndex === -1) {
-              return {
-                ...prev,
-                [conversationId]: {
-                  ...current,
-                  preview: buildConversationPreview(assistantContent),
-                  updatedAt: responseTimestamp,
-                  messages: [...messages, assistantMessage],
-                },
-              };
+              return prev;
             }
 
             const updatedMessages = [...messages];
@@ -507,12 +507,10 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        await refreshConversations();
+        void refreshConversations();
       } catch (error) {
-        console.error("Failed to send message:", error);
+        console.error("Failed to persist assistant message:", error);
         options.onInferenceError?.(ChatScreenLabels.INFERENCE_FAILED);
-      } finally {
-        setIsSending(false);
       }
     },
     [isConversationFocused, refreshConversations],
@@ -520,23 +518,28 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
   const continueAssistantMessage = useCallback(
     async (conversationId: string, messageId: string, options: SendMessageOptions) => {
-      const modelPath = await resolveDownloadedModelPath(options.modelId);
+      const modelPath = options.modelPath ?? (await resolveDownloadedModelPath(options.modelId));
       if (!modelPath) {
         options.onInferenceError?.(ChatScreenLabels.MODEL_UNAVAILABLE);
+        return;
+      }
+
+      const cachedMessages = conversationDetailsRef.current[conversationId]?.messages;
+      const history =
+        cachedMessages && cachedMessages.length > 0
+          ? cachedMessages
+          : await getMessagesByConversationId(conversationId);
+
+      const existingMessage = history.find((message) => message.id === messageId);
+
+      if (!existingMessage || existingMessage.role !== "assistant") {
+        options.onInferenceError?.(ChatScreenLabels.CONTINUE_RESPONSE_FAILED);
         return;
       }
 
       setIsSending(true);
 
       try {
-        const history = await getMessagesByConversationId(conversationId);
-        const existingMessage = history.find((message) => message.id === messageId);
-
-        if (!existingMessage || existingMessage.role !== "assistant") {
-          options.onInferenceError?.(ChatScreenLabels.CONTINUE_RESPONSE_FAILED);
-          return;
-        }
-
         const appendStreamingUpdate = (content: string, status: ChatMessage["status"] = "streaming"): void => {
           if (!isConversationFocused(conversationId)) {
             return;

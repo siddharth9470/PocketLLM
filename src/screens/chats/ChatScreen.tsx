@@ -42,7 +42,6 @@ import {
 import {
   classifyInferenceError,
   initializeModel,
-  releaseModel,
   resolveDownloadedModelPath,
 } from "@/services/chatHelper";
 import { useChatStore } from "@/stores/chatStore";
@@ -123,6 +122,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   const isSending = useChatStore((state) => state.isSending);
 
   const [selectedModelId, setSelectedModelId] = useState<string | undefined>(conversation?.modelId);
+  const [selectedModelPath, setSelectedModelPath] = useState<string | undefined>();
   const [isInitialLoad, setIsInitialLoad] = useState(() => conversation === undefined);
   const [isChatUiMounted, setIsChatUiMounted] = useState(false);
   const [isModelPickerVisible, setIsModelPickerVisible] = useState(false);
@@ -142,6 +142,25 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
       isMountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedModelId) {
+      setSelectedModelPath(undefined);
+      return;
+    }
+
+    let isCancelled = false;
+
+    void resolveDownloadedModelPath(selectedModelId).then((path) => {
+      if (!isCancelled && path) {
+        setSelectedModelPath(path);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedModelId]);
 
   const headerHeight = 130;
 
@@ -180,7 +199,6 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         Keyboard.dismiss();
         setIsChatUiMounted(false);
         setIsModelPickerVisible(false);
-        void releaseModel();
       };
     }, [conversationId, loadConversation, refreshReadyModels, setActiveConversationId]),
   );
@@ -261,11 +279,21 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
       void sendMessage(conversationId, text, {
         modelId: selectedModelId,
+        modelPath: selectedModelPath,
         attachmentDrafts: drafts,
         onInferenceError: showInferenceError,
       });
     },
-    [conversationId, isModelReady, isSending, pendingAttachments, selectedModelId, sendMessage, showInferenceError],
+    [
+      conversationId,
+      isModelReady,
+      isSending,
+      pendingAttachments,
+      selectedModelId,
+      selectedModelPath,
+      sendMessage,
+      showInferenceError,
+    ],
   );
 
   const removePendingAttachment = useCallback((storagePath: string) => {
@@ -436,6 +464,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         }
 
         await initializeModel(modelPath);
+        setSelectedModelPath(modelPath);
         setReadyModelIds((prev) => new Set(prev).add(model.id));
         void setConversationModel(conversationId, model.id);
       } catch (error) {
@@ -474,10 +503,19 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
       void continueAssistantMessage(conversationId, messageId, {
         modelId: selectedModelId,
+        modelPath: selectedModelPath,
         onInferenceError: showInferenceError,
       });
     },
-    [continueAssistantMessage, conversationId, isModelReady, isSending, selectedModelId, showInferenceError],
+    [
+      continueAssistantMessage,
+      conversationId,
+      isModelReady,
+      isSending,
+      selectedModelId,
+      selectedModelPath,
+      showInferenceError,
+    ],
   );
 
   const renderMessageText = useCallback((props: MessageTextProps<PocketChatMessage>) => {

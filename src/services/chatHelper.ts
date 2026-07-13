@@ -5,6 +5,7 @@
 
 export {
   type ChatCompletionResult,
+  type InferenceOptions,
   type InferenceTokenHandler,
   runContinueInference,
   runInference,

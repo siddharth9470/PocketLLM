@@ -1,8 +1,23 @@
-import type { LlamaContext, NativeCompletionResult, RNLlamaOAICompatibleMessage, TokenData } from "llama.rn";
+import type { NativeCompletionResult, RNLlamaOAICompatibleMessage, TokenData } from "llama.rn";
 
-import { GENERATION_TOKEN_BUFFER, MAX_COMPLETION_TOKENS, MIN_COMPLETION_TOKENS } from "@/constants/chat";
+import {
+  GENERATION_TOKEN_BUFFER,
+  LONG_USER_PROMPT_MAX_CHARS,
+  LONG_USER_PROMPT_N_PREDICT,
+  MAX_COMPLETION_TOKENS,
+  MEDIUM_USER_PROMPT_MAX_CHARS,
+  MEDIUM_USER_PROMPT_N_PREDICT,
+  MIN_COMPLETION_TOKENS,
+  SHORT_USER_PROMPT_MAX_CHARS,
+  SHORT_USER_PROMPT_N_PREDICT,
+} from "@/constants/chat";
 import { buildContinuationContext } from "@/services/inference/chatContext";
-import { getActiveContext, getContextWindowSize, initializeModel } from "@/services/inference/llamaRuntime";
+import {
+  getActiveContext,
+  getCachedJinjaSupported,
+  getContextWindowSize,
+  initializeModel,
+} from "@/services/inference/llamaRuntime";
 import type { ChatMessage } from "@/types/chat";
 import { buildStopSequences } from "@/utils/inferenceStopTokens";
 import { sanitizeAssistantResponse, stripReasoningTagsForStreaming } from "@/utils/reasoningFilter";
@@ -28,6 +43,11 @@ export interface ChatCompletionResult {
 
 export type InferenceTokenHandler = (displayText: string) => void;
 
+export interface InferenceOptions {
+  /** Character length of the latest user turn; used to cap n_predict for short prompts. */
+  userPromptLength?: number;
+}
+
 /** Extracts display-safe streaming text from a token callback, stripping hidden reasoning channels. */
 function extractStreamingDisplayText(data: TokenData): string {
   const raw = data.content ?? data.accumulated_text ?? "";
@@ -39,40 +59,42 @@ function isCompletionTruncated(result: NativeCompletionResult): boolean {
   return result.truncated === true || result.stopped_limit > 0 || result.context_full === true;
 }
 
-/**
- * Computes how many completion tokens can be generated without exceeding n_ctx.
- * Measures the prompt via Jinja formatting when supported, otherwise falls back to a conservative estimate.
- */
-async function resolveGenerationBudget(
-  context: LlamaContext,
-  messages: RNLlamaOAICompatibleMessage[],
-  jinjaSupported: boolean,
-): Promise<number> {
-  const contextWindow = getContextWindowSize();
-  let promptTokens = Math.floor(contextWindow * 0.45);
+/** Estimates prompt token count from message text without an extra Jinja format pass. */
+function estimatePromptTokens(messages: RNLlamaOAICompatibleMessage[]): number {
+  let charCount = 0;
 
-  try {
-    if (jinjaSupported) {
-      const formatted = await context.getFormattedChat(messages, null, JINJA_CHAT_FORMAT_OPTIONS);
-
-      if (formatted.type === "jinja" && formatted.prompt) {
-        const tokenized = await context.tokenize(formatted.prompt);
-        promptTokens = tokenized.tokens.length;
-      }
-    } else {
-      const serialized = messages
-        .map((message) => (typeof message.content === "string" ? message.content : ""))
-        .join("\n");
-      const tokenized = await context.tokenize(serialized);
-      promptTokens = tokenized.tokens.length;
+  for (const message of messages) {
+    if (typeof message.content === "string") {
+      charCount += message.content.length;
     }
-  } catch (error) {
-    console.warn("Failed to measure prompt tokens; using conservative generation budget.", error);
   }
 
-  const availableTokens = contextWindow - promptTokens - GENERATION_TOKEN_BUFFER;
+  return Math.ceil(charCount / 3.5);
+}
 
-  return Math.min(MAX_COMPLETION_TOKENS, Math.max(MIN_COMPLETION_TOKENS, availableTokens));
+/**
+ * Resolves n_predict using prompt-length heuristics instead of a pre-completion Jinja tokenize pass.
+ * Short user prompts get a tight cap so greetings do not trigger long generations.
+ */
+function resolveNPredict(messages: RNLlamaOAICompatibleMessage[], userPromptLength?: number): number {
+  const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
+  const latestUserLength =
+    userPromptLength ?? (typeof lastUserMessage?.content === "string" ? lastUserMessage.content.length : 0);
+
+  let promptCap = MIN_COMPLETION_TOKENS;
+  if (latestUserLength <= SHORT_USER_PROMPT_MAX_CHARS) {
+    promptCap = SHORT_USER_PROMPT_N_PREDICT;
+  } else if (latestUserLength <= MEDIUM_USER_PROMPT_MAX_CHARS) {
+    promptCap = MEDIUM_USER_PROMPT_N_PREDICT;
+  } else if (latestUserLength <= LONG_USER_PROMPT_MAX_CHARS) {
+    promptCap = LONG_USER_PROMPT_N_PREDICT;
+  }
+
+  const contextWindow = getContextWindowSize();
+  const estimatedPromptTokens = estimatePromptTokens(messages);
+  const availableTokens = contextWindow - estimatedPromptTokens - GENERATION_TOKEN_BUFFER;
+
+  return Math.min(promptCap, MAX_COMPLETION_TOKENS, Math.max(32, availableTokens));
 }
 
 /**
@@ -83,6 +105,7 @@ async function executeCompletion(
   modelPath: string,
   messages: RNLlamaOAICompatibleMessage[],
   onToken?: InferenceTokenHandler,
+  options?: InferenceOptions,
 ): Promise<ChatCompletionResult> {
   await initializeModel(modelPath);
 
@@ -93,8 +116,8 @@ async function executeCompletion(
 
   await context.clearCache(false);
 
-  const jinjaSupported = await context.isJinjaSupported();
-  const nPredict = await resolveGenerationBudget(context, messages, jinjaSupported);
+  const jinjaSupported = getCachedJinjaSupported() ?? (await context.isJinjaSupported());
+  const nPredict = resolveNPredict(messages, options?.userPromptLength);
   const stopSequences = buildStopSequences(modelPath, jinjaSupported);
 
   const completionParams = {
@@ -135,9 +158,10 @@ export async function runInference(
   modelPath: string,
   messages: RNLlamaOAICompatibleMessage[],
   onToken?: InferenceTokenHandler,
+  options?: InferenceOptions,
 ): Promise<ChatCompletionResult> {
   try {
-    return await executeCompletion(modelPath, messages, onToken);
+    return await executeCompletion(modelPath, messages, onToken, options);
   } catch (error) {
     console.error("Error during chat completion:", error);
     throw error;
@@ -155,7 +179,9 @@ export async function runContinueInference(
   const continuationMessages = buildContinuationContext(messages, assistantMessageId, partialAssistantContent);
 
   try {
-    return await executeCompletion(modelPath, continuationMessages, onToken);
+    return await executeCompletion(modelPath, continuationMessages, onToken, {
+      userPromptLength: partialAssistantContent.length,
+    });
   } catch (error) {
     console.error("Error during continuation completion:", error);
     throw error;

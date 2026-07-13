@@ -8,6 +8,7 @@ import { isLanguageModelGgufFilename } from "@/utils/ggufFileSelection";
 
 let llamaContext: LlamaContext | null = null;
 let loadedModelPath: string | null = null;
+let cachedJinjaSupported: boolean | null = null;
 
 /** Returns the platform-specific context window size (n_ctx) used when loading a model. */
 export function getContextWindowSize(): number {
@@ -17,6 +18,11 @@ export function getContextWindowSize(): number {
 /** Returns the active llama.rn context held by the module singleton, if any. */
 export function getActiveContext(): LlamaContext | null {
   return llamaContext;
+}
+
+/** Returns the cached Jinja support flag for the loaded model, if already known. */
+export function getCachedJinjaSupported(): boolean | null {
+  return cachedJinjaSupported;
 }
 
 /** Normalizes a local model path to a consistent `file://` URI for filesystem and native bridge use. */
@@ -54,7 +60,7 @@ function buildLlamaContextParams(modelPath: string): ContextParams {
     use_mmap: true,
     n_ctx: getContextWindowSize(),
     n_gpu_layers: Platform.OS === "ios" ? 99 : 0,
-    n_threads: Platform.OS === "android" ? 4 : undefined,
+    n_threads: Platform.OS === "android" ? 6 : undefined,
   };
 }
 
@@ -89,9 +95,13 @@ export async function resolveDownloadedModelPath(modelId: string): Promise<strin
 
 /** Loads a GGUF model into memory via llama.rn, reusing the existing context when the same path is already active. */
 export async function initializeModel(modelPath: string): Promise<void> {
-  const normalizedPath = await validateModelForInference(modelPath);
+  if (!isLanguageModelGgufFilename(modelPath)) {
+    throw new Error("Selected GGUF file is not a language-model weights file.");
+  }
 
-  if (llamaContext && loadedModelPath === normalizedPath) {
+  const nativePath = toNativeModelPath(modelPath);
+
+  if (llamaContext && loadedModelPath === nativePath) {
     return;
   }
 
@@ -99,12 +109,16 @@ export async function initializeModel(modelPath: string): Promise<void> {
     await releaseModel();
   }
 
+  const validatedPath = await validateModelForInference(modelPath);
+
   try {
-    llamaContext = await initLlama(buildLlamaContextParams(normalizedPath));
-    loadedModelPath = normalizedPath;
+    llamaContext = await initLlama(buildLlamaContextParams(validatedPath));
+    loadedModelPath = validatedPath;
+    cachedJinjaSupported = await llamaContext.isJinjaSupported();
   } catch (error) {
     llamaContext = null;
     loadedModelPath = null;
+    cachedJinjaSupported = null;
     console.error("Failed to initialize Llama model:", error);
     throw error;
   }
@@ -121,6 +135,7 @@ export async function releaseModel(): Promise<void> {
     } finally {
       llamaContext = null;
       loadedModelPath = null;
+      cachedJinjaSupported = null;
     }
   }
 }
@@ -131,7 +146,7 @@ export async function releaseModelForPath(filePath: string): Promise<void> {
     return;
   }
 
-  if (normalizeModelPath(filePath) === normalizeModelPath(loadedModelPath)) {
+  if (toNativeModelPath(filePath) === loadedModelPath) {
     await releaseModel();
   }
 }
