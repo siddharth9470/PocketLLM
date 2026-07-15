@@ -208,7 +208,7 @@ npm run android
 
 ### Android emulator shortcut
 
-A convenience script is available if you have an AVD named `Medium_Phone`:
+A convenience script launches the `Pixel_10_Pro_XL` AVD:
 
 ```bash
 npm run launch-android-emulator
