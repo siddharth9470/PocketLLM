@@ -1,15 +1,10 @@
-import { Ionicons } from "@expo/vector-icons";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
-import type { Audio } from "expo-av";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Keyboard,
-  Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   type TextInputContentSizeChangeEvent,
@@ -32,13 +27,6 @@ import { ChatScreenLabels } from "@/constants/chat";
 import { colors, radii, spacing, typography } from "@/constants/theme";
 import { getDownloadedModelsList } from "@/db/ModelDB";
 import type { ChatsStackScreenProps } from "@/navigation/types";
-import {
-  finalizeVoiceRecording,
-  type PersistedAttachmentDraft,
-  pickAndPersistAudio,
-  pickAndPersistImage,
-  startVoiceRecording,
-} from "@/services/chatAttachments";
 import { initializeModel, resolveDownloadedModelPath } from "@/services/chatHelper";
 import { useChatStore } from "@/stores/chatStore";
 import type { HuggingFaceModel } from "@/types/models";
@@ -122,12 +110,8 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   const [isChatUiMounted, setIsChatUiMounted] = useState(false);
   const [isModelPickerVisible, setIsModelPickerVisible] = useState(false);
   const [readyModelIds, setReadyModelIds] = useState<Set<string>>(new Set());
-  const [pendingAttachments, setPendingAttachments] = useState<PersistedAttachmentDraft[]>([]);
-  const [attachmentMenuVisible, setAttachmentMenuVisible] = useState(false);
-  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [isLoadingModel, setIsLoadingModel] = useState(false);
 
-  const voiceRecordingRef = useRef<Audio.Recording | null>(null);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -257,151 +241,25 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
       }
 
       const text = messages[0]?.text.trim() ?? "";
-      if (!text && pendingAttachments.length === 0) {
+      if (!text) {
         return;
       }
 
       Keyboard.dismiss();
-      const drafts = [...pendingAttachments];
-      setPendingAttachments([]);
 
       void sendMessage(conversationId, text, {
         modelId: selectedModelId,
-        attachmentDrafts: drafts,
         onSendError: showChatError,
       });
     },
-    [conversationId, isModelReady, isSending, pendingAttachments, selectedModelId, sendMessage, showChatError],
+    [conversationId, isModelReady, isSending, selectedModelId, sendMessage, showChatError],
   );
-
-  const removePendingAttachment = useCallback((storagePath: string) => {
-    setPendingAttachments((prev) => prev.filter((attachment) => attachment.storagePath !== storagePath));
-  }, []);
-
-  const handlePickImage = useCallback(async () => {
-    setAttachmentMenuVisible(false);
-    try {
-      const draft = await pickAndPersistImage(conversationId);
-      if (draft) {
-        setPendingAttachments((prev) => [...prev, draft]);
-      }
-    } catch (error) {
-      showChatError(error instanceof Error ? error.message : ChatScreenLabels.ATTACHMENT_ERROR_TITLE);
-    }
-  }, [conversationId, showChatError]);
-
-  const handlePickAudio = useCallback(async () => {
-    setAttachmentMenuVisible(false);
-    try {
-      const draft = await pickAndPersistAudio(conversationId);
-      if (draft) {
-        setPendingAttachments((prev) => [...prev, draft]);
-      }
-    } catch (error) {
-      showChatError(error instanceof Error ? error.message : ChatScreenLabels.ATTACHMENT_ERROR_TITLE);
-    }
-  }, [conversationId, showChatError]);
-
-  const handleToggleVoiceRecording = useCallback(async () => {
-    if (isRecordingVoice && voiceRecordingRef.current) {
-      try {
-        const draft = await finalizeVoiceRecording(voiceRecordingRef.current, conversationId);
-        voiceRecordingRef.current = null;
-        setIsRecordingVoice(false);
-        setPendingAttachments((prev) => [...prev, draft]);
-      } catch (error) {
-        voiceRecordingRef.current = null;
-        setIsRecordingVoice(false);
-        showChatError(error instanceof Error ? error.message : ChatScreenLabels.ATTACHMENT_ERROR_TITLE);
-      }
-      return;
-    }
-
-    try {
-      const recording = await startVoiceRecording();
-      voiceRecordingRef.current = recording;
-      setIsRecordingVoice(true);
-    } catch (error) {
-      showChatError(error instanceof Error ? error.message : ChatScreenLabels.ATTACHMENT_ERROR_TITLE);
-    }
-  }, [conversationId, isRecordingVoice, showChatError]);
 
   const renderInputToolbar = useCallback(
     (props: ComponentProps<typeof InputToolbar>) => (
-      <View style={styles.inputToolbarContainer}>
-        {pendingAttachments.length > 0 ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pendingAttachmentScroll}>
-            {pendingAttachments.map((attachment) => (
-              <View key={attachment.storagePath} style={styles.pendingAttachmentChip}>
-                <Ionicons
-                  name={attachment.kind === "image" ? "image-outline" : "musical-notes-outline"}
-                  size={14}
-                  color={colors.primary}
-                />
-                <Text style={styles.pendingAttachmentText} numberOfLines={1}>
-                  {attachment.kind === "image" ? "Image" : "Audio"}
-                </Text>
-                <Pressable
-                  onPress={() => removePendingAttachment(attachment.storagePath)}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={ChatScreenLabels.ATTACHMENT_REMOVE}
-                >
-                  <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
-                </Pressable>
-              </View>
-            ))}
-          </ScrollView>
-        ) : null}
-
-        <InputToolbar
-          {...props}
-          containerStyle={styles.inputToolbarInner}
-          primaryStyle={styles.inputToolbarPrimary}
-          renderActions={() => (
-            <View style={styles.accessoryActions}>
-              <Pressable
-                style={styles.accessoryButton}
-                onPress={() => setAttachmentMenuVisible(true)}
-                disabled={!isModelReady || isSending}
-                accessibilityRole="button"
-                accessibilityLabel={ChatScreenLabels.ATTACHMENT_ADD}
-              >
-                <Ionicons
-                  name="add-circle-outline"
-                  size={26}
-                  color={isModelReady ? colors.primary : colors.textSecondary}
-                />
-              </Pressable>
-
-              <Pressable
-                style={[styles.accessoryButton, isRecordingVoice && styles.accessoryButtonRecording]}
-                onPress={() => void handleToggleVoiceRecording()}
-                disabled={!isModelReady || isSending}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  isRecordingVoice ? ChatScreenLabels.ATTACHMENT_RECORDING : ChatScreenLabels.ATTACHMENT_RECORD
-                }
-              >
-                <Ionicons
-                  name={isRecordingVoice ? "stop-circle" : "mic-outline"}
-                  size={24}
-                  color={isRecordingVoice ? colors.danger : isModelReady ? colors.primary : colors.textSecondary}
-                />
-              </Pressable>
-            </View>
-          )}
-        />
-      </View>
+      <InputToolbar {...props} containerStyle={styles.inputToolbarContainer} primaryStyle={styles.inputToolbarPrimary} />
     ),
-    [
-      handleToggleVoiceRecording,
-      isModelReady,
-      isRecordingVoice,
-      isSending,
-      pendingAttachments,
-      removePendingAttachment,
-    ],
+    [],
   );
 
   const renderComposer = useCallback((props: ComponentProps<typeof Composer>) => <ChatComposer {...props} />, []);
@@ -462,15 +320,13 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
       }
 
       const hasText = (props.text?.trim().length ?? 0) > 0;
-      const hasAttachments = pendingAttachments.length > 0;
-
-      if (!hasText && !hasAttachments) {
+      if (!hasText) {
         return null;
       }
 
-      return <Send {...props} isTextOptional={hasAttachments} />;
+      return <Send {...props} />;
     },
-    [isModelReady, pendingAttachments.length],
+    [isModelReady],
   );
 
   const renderMessageText = useCallback((props: MessageTextProps<PocketChatMessage>) => {
@@ -547,27 +403,6 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
           />
         ) : null}
       </View>
-
-      <Modal
-        visible={attachmentMenuVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setAttachmentMenuVisible(false)}
-      >
-        <Pressable style={styles.attachmentBackdrop} onPress={() => setAttachmentMenuVisible(false)}>
-          <View style={styles.attachmentSheet}>
-            <Text style={styles.attachmentSheetTitle}>{ChatScreenLabels.ATTACHMENT_ADD}</Text>
-            <Pressable style={styles.attachmentOption} onPress={() => void handlePickImage()}>
-              <Ionicons name="image-outline" size={20} color={colors.primary} />
-              <Text style={styles.attachmentOptionText}>{ChatScreenLabels.ATTACHMENT_IMAGE}</Text>
-            </Pressable>
-            <Pressable style={styles.attachmentOption} onPress={() => void handlePickAudio()}>
-              <Ionicons name="musical-notes-outline" size={20} color={colors.primary} />
-              <Text style={styles.attachmentOptionText}>{ChatScreenLabels.ATTACHMENT_AUDIO}</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
     </View>
   );
 }
@@ -612,70 +447,6 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingBottom: spacing.xs,
-  },
-  inputToolbarInner: {
-    backgroundColor: colors.background,
-    borderTopWidth: 0,
-  },
-  accessoryActions: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-  },
-  accessoryButton: {
-    width: 40,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  accessoryButtonRecording: {
-    backgroundColor: colors.chipBackground,
-    borderRadius: radii.pill,
-  },
-  pendingAttachmentScroll: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
-    maxHeight: 44,
-  },
-  pendingAttachmentChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    marginRight: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    backgroundColor: colors.chipBackground,
-  },
-  pendingAttachmentText: {
-    ...typography.caption,
-    color: colors.text,
-    maxWidth: 72,
-  },
-  attachmentBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "flex-end",
-  },
-  attachmentSheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radii.lg,
-    borderTopRightRadius: radii.lg,
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  attachmentSheetTitle: {
-    ...typography.headline,
-    color: colors.text,
-  },
-  attachmentOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    minHeight: 44,
-  },
-  attachmentOptionText: {
-    ...typography.body,
-    color: colors.text,
   },
   inputToolbarPrimary: {
     alignItems: "flex-end",

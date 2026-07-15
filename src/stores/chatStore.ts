@@ -1,3 +1,4 @@
+import * as FileSystem from "expo-file-system/legacy";
 import {
   createContext,
   createElement,
@@ -15,22 +16,18 @@ import {
   conversationExists,
   createConversation,
   createMessage,
-  createMessageAttachments,
   deleteConversation,
   getAttachmentStoragePathsByConversationId,
   getConversationById,
   getConversations,
   updateConversation,
 } from "@/db/ChatDB";
-import type { PersistedAttachmentDraft } from "@/services/chatAttachments";
-import { deleteAttachmentFiles } from "@/services/chatAttachments";
-import type { ChatMessage, ChatMessageAttachment, Conversation } from "@/types/chat";
+import type { ChatMessage, Conversation } from "@/types/chat";
 import { deriveConversationTitle, generateChatId } from "@/utils/chatIds";
 import { buildConversationPreview } from "@/utils/conversationPreview";
 
 interface SendMessageOptions {
   modelId: string;
-  attachmentDrafts?: PersistedAttachmentDraft[];
   onSendError?: (message: string) => void;
 }
 
@@ -51,11 +48,7 @@ interface ChatStore {
 
 const ChatStoreContext = createContext<ChatStore | undefined>(undefined);
 
-function buildUserMessage(
-  conversationId: string,
-  content: string,
-  attachments?: ChatMessageAttachment[],
-): ChatMessage {
+function buildUserMessage(conversationId: string, content: string): ChatMessage {
   return {
     id: generateChatId(),
     conversationId,
@@ -63,33 +56,7 @@ function buildUserMessage(
     content,
     status: "completed",
     createdAt: new Date().toISOString(),
-    ...(attachments && attachments.length > 0 ? { attachments } : {}),
   };
-}
-
-/** Maps persisted attachment drafts into normalized rows for the message_attachments table. */
-function buildAttachmentRows(
-  messageId: string,
-  conversationId: string,
-  drafts: PersistedAttachmentDraft[],
-): ChatMessageAttachment[] {
-  const createdAt = new Date().toISOString();
-
-  return drafts.map((draft, index) => ({
-    id: generateChatId(),
-    messageId,
-    conversationId,
-    kind: draft.kind,
-    storagePath: draft.storagePath,
-    mimeType: draft.mimeType,
-    fileSizeBytes: draft.fileSizeBytes,
-    sortOrder: index,
-    createdAt,
-    ...(draft.originalFileName ? { originalFileName: draft.originalFileName } : {}),
-    ...(draft.width != null ? { width: draft.width } : {}),
-    ...(draft.height != null ? { height: draft.height } : {}),
-    ...(draft.durationMs != null ? { durationMs: draft.durationMs } : {}),
-  }));
 }
 
 function buildAssistantMessage(conversationId: string, content: string, id?: string): ChatMessage {
@@ -120,6 +87,19 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+async function deleteStoredAttachmentFiles(paths: string[]): Promise<void> {
+  await Promise.all(
+    paths.map(async (storagePath) => {
+      try {
+        const uri = storagePath.startsWith("file://") ? storagePath : `file://${storagePath}`;
+        await FileSystem.deleteAsync(uri, { idempotent: true });
+      } catch (error) {
+        console.warn(`Failed to delete attachment at ${storagePath}:`, error);
+      }
+    }),
+  );
 }
 
 export function ChatStoreProvider({ children }: { children: ReactNode }) {
@@ -254,14 +234,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
   const sendMessage = useCallback(
     async (conversationId: string, content: string, options: SendMessageOptions) => {
-      const attachmentDrafts = options.attachmentDrafts ?? [];
-      const trimmed = content.trim();
-      const messageText =
-        trimmed.length > 0
-          ? trimmed
-          : attachmentDrafts.length > 0
-            ? ChatScreenLabels.AUDIO_DEFAULT_PROMPT
-            : "";
+      const messageText = content.trim();
 
       if (!messageText) {
         return;
@@ -269,10 +242,6 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
       const now = new Date().toISOString();
       const userMessage = buildUserMessage(conversationId, messageText);
-      const attachmentRows = buildAttachmentRows(userMessage.id, conversationId, attachmentDrafts);
-      if (attachmentRows.length > 0) {
-        userMessage.attachments = attachmentRows;
-      }
 
       const assistantMessageId = generateChatId();
       const assistantContent = ChatScreenLabels.DUMMY_ASSISTANT_RESPONSE;
@@ -318,10 +287,6 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         }
 
         await createMessage(userMessage);
-        if (attachmentRows.length > 0) {
-          await createMessageAttachments(attachmentRows);
-        }
-
         await updateConversation(conversationId, { preview: messageText, updatedAt: now });
       } catch (error) {
         console.error("Failed to persist user message:", error);
@@ -378,7 +343,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
     await deleteConversation(conversationId);
 
     if (attachmentPaths.length > 0) {
-      await deleteAttachmentFiles(attachmentPaths);
+      await deleteStoredAttachmentFiles(attachmentPaths);
     }
 
     setConversations((prev) => prev.filter((conversation) => conversation.id !== conversationId));

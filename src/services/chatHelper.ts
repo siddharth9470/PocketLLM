@@ -12,3 +12,5 @@ export {
   releaseModelForPath,
   resolveDownloadedModelPath,
 } from "@/services/inference/llamaRuntime";
+
+export { chatCompletion } from "@/services/inference/chatCompletion";

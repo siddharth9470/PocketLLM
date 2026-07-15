@@ -97,29 +97,6 @@ jest.mock("expo-device", () => ({
   platformApiLevel: 34,
 }));
 
-jest.mock("expo-av", () => ({
-  Audio: {
-    Recording: jest.fn(),
-    requestPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }),
-    setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
-    AndroidOutputFormat: { DEFAULT: 0 },
-    AndroidAudioEncoder: { DEFAULT: 0 },
-    IOSAudioQuality: { MEDIUM: 0 },
-    RecordingOptionsPresets: { HIGH_QUALITY: { web: {} } },
-  },
-}));
-jest.mock("expo-image-picker", () => ({
-  requestMediaLibraryPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }),
-  launchImageLibraryAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
-}));
-jest.mock("expo-document-picker", () => ({
-  getDocumentAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
-}));
-jest.mock("expo-image-manipulator", () => ({
-  manipulateAsync: jest.fn(),
-  SaveFormat: { JPEG: "jpeg" },
-}));
-
 jest.mock("react-native-device-info", () => ({
   getDeviceName: jest.fn().mockResolvedValue("Mock Device"),
   getModel: jest.fn().mockResolvedValue("Mock Model"),
