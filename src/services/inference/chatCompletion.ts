@@ -59,7 +59,10 @@ export async function chatCompletion(
           content: prompt,
         },
       ],
-      n_predict: 100,
+      n_predict: 512,
+      reasoning_format: "auto",
+      thinking_budget_tokens: 96,
+      enable_thinking: false,
       stop: stopWords,
     },
     (data) => {
