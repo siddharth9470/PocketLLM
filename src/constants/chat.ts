@@ -18,10 +18,7 @@ export const ChatScreenLabels = {
   INFERENCE_FAILED: "Sorry, something went wrong generating a response.",
   INFERENCE_ERROR_TITLE: "Generation Failed",
   MODEL_INIT_FAILED: "Could not load the selected model. Please try again.",
-  DUMMY_ASSISTANT_RESPONSE: "This is a placeholder assistant response.",
 } as const;
-
-export const DUMMY_RESPONSE_DELAY_MS = 500;
 
 export const CONTEXT_WINDOW_TOKENS_ANDROID = 4096;
 export const CONTEXT_WINDOW_TOKENS_IOS = 8192;

@@ -7,11 +7,11 @@ import {
   mockExecute,
   restoreRealChatStore,
 } from "@tests/testUtils";
-import { ChatScreenLabels, DUMMY_RESPONSE_DELAY_MS } from "@/constants/chat";
+import { ChatScreenLabels } from "@/constants/chat";
 import { chatDb } from "@/db/ChatDB";
 import { getDownloadedModelsList } from "@/db/ModelDB";
 import ChatScreen from "@/screens/chats/ChatScreen";
-import { initializeModel, releaseModel, resolveDownloadedModelPath } from "@/services/chatHelper";
+import { chatCompletion, initializeModel, releaseModel, resolveDownloadedModelPath } from "@/services/chatHelper";
 import { ChatStoreProvider } from "@/stores/chatStore";
 
 jest.mock("@/stores/chatStore", () => {
@@ -28,6 +28,7 @@ jest.mock("@/services/chatHelper", () => ({
   initializeModel: jest.fn(),
   releaseModel: jest.fn(),
   resolveDownloadedModelPath: jest.fn(),
+  chatCompletion: jest.fn(),
 }));
 jest.mock("@/utils/chatIds", () => ({
   generateChatId: jest.fn(() => `chat-id-${Date.now()}`),
@@ -103,6 +104,7 @@ const GIFTED_CHAT_SEND_TEST_ID = "GC_SEND_TOUCHABLE";
 const MOCK_MODEL = buildCompletedModel();
 const MOCK_MODEL_PATH = "/mock/path.gguf";
 const MOCK_USER_PROMPT = "What is on-device inference?";
+const MOCK_ASSISTANT_RESPONSE = "On-device inference runs the model locally on your phone.";
 
 const navigation = {
   navigate: jest.fn(),
@@ -283,7 +285,6 @@ describe("Messaging pipeline and database sync", () => {
   });
 
   beforeEach(() => {
-    jest.useFakeTimers();
     jest.clearAllMocks();
     restoreRealChatStore();
     mockExecute.mockClear();
@@ -293,13 +294,18 @@ describe("Messaging pipeline and database sync", () => {
     jest.mocked(resolveDownloadedModelPath).mockResolvedValue(MOCK_MODEL_PATH);
     jest.mocked(initializeModel).mockResolvedValue(undefined);
     jest.mocked(releaseModel).mockResolvedValue(undefined);
+    jest.mocked(chatCompletion).mockImplementation(async (_prompt, onToken) => {
+      onToken?.("On-device ");
+      onToken?.(MOCK_ASSISTANT_RESPONSE);
+      return { text: MOCK_ASSISTANT_RESPONSE };
+    });
   });
 
   afterEach(() => {
     jest.useRealTimers();
   });
 
-  it("persists user and dummy assistant messages after the placeholder delay", async () => {
+  it("persists user and assistant messages after chat completion", async () => {
     await mountChatScreenWithProvider(dbSyncRoute);
 
     if (screen.queryAllByText(ChatScreenLabels.MODEL_SELECT_TITLE).length > 0) {
@@ -308,17 +314,13 @@ describe("Messaging pipeline and database sync", () => {
 
     await typeAndSendMessage(MOCK_USER_PROMPT);
 
-    await act(async () => {
-      jest.advanceTimersByTime(DUMMY_RESPONSE_DELAY_MS);
-    });
-
     await waitFor(() => {
       const inserts = getChatMessageInserts();
       const userInsert = inserts.find((params) => params[2] === "user");
       const assistantInsert = inserts.find((params) => params[2] === "assistant");
 
       expect(userInsert?.[3]).toBe(MOCK_USER_PROMPT);
-      expect(assistantInsert?.[3]).toBe(ChatScreenLabels.DUMMY_ASSISTANT_RESPONSE);
+      expect(assistantInsert?.[3]).toBe(MOCK_ASSISTANT_RESPONSE);
       expect(inserts.length).toBeGreaterThanOrEqual(2);
     });
   });

@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 
-import { ChatScreenLabels, DUMMY_RESPONSE_DELAY_MS } from "@/constants/chat";
+import { ChatScreenLabels } from "@/constants/chat";
 import {
   conversationExists,
   createConversation,
@@ -22,6 +22,7 @@ import {
   getConversations,
   updateConversation,
 } from "@/db/ChatDB";
+import { chatCompletion, initializeModel, resolveDownloadedModelPath } from "@/services/chatHelper";
 import type { ChatMessage, Conversation } from "@/types/chat";
 import { deriveConversationTitle, generateChatId } from "@/utils/chatIds";
 import { buildConversationPreview } from "@/utils/conversationPreview";
@@ -70,6 +71,74 @@ function buildAssistantMessage(conversationId: string, content: string, id?: str
   };
 }
 
+function buildStreamingAssistantMessage(conversationId: string, id: string): ChatMessage {
+  return {
+    id,
+    conversationId,
+    role: "assistant",
+    content: "",
+    status: "streaming",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function replaceAssistantMessage(
+  messages: ChatMessage[],
+  assistantMessageId: string,
+  nextMessage: ChatMessage,
+): ChatMessage[] {
+  const hasAssistantMessage = messages.some((message) => message.id === assistantMessageId);
+
+  if (hasAssistantMessage) {
+    return messages.map((message) => (message.id === assistantMessageId ? nextMessage : message));
+  }
+
+  return [...messages, nextMessage];
+}
+
+function updateStreamingAssistantContent(
+  conversationDetails: Record<string, Conversation>,
+  conversationId: string,
+  assistantMessageId: string,
+  content: string,
+): Record<string, Conversation> {
+  const current = conversationDetails[conversationId];
+  if (!current) {
+    return conversationDetails;
+  }
+
+  const messages = current.messages ?? [];
+
+  return {
+    ...conversationDetails,
+    [conversationId]: {
+      ...current,
+      messages: messages.map((message) =>
+        message.id === assistantMessageId ? { ...message, content, status: "streaming" } : message,
+      ),
+    },
+  };
+}
+
+function removeAssistantMessageFromConversation(
+  conversationDetails: Record<string, Conversation>,
+  conversationId: string,
+  assistantMessageId: string,
+): Record<string, Conversation> {
+  const current = conversationDetails[conversationId];
+  if (!current) {
+    return conversationDetails;
+  }
+
+  return {
+    ...conversationDetails,
+    [conversationId]: {
+      ...current,
+      messages: (current.messages ?? []).filter((message) => message.id !== assistantMessageId),
+    },
+  };
+}
+
 function buildNewChatPlaceholder(conversationId: string): Conversation {
   const now = new Date().toISOString();
   return {
@@ -81,12 +150,6 @@ function buildNewChatPlaceholder(conversationId: string): Conversation {
     updatedAt: now,
     messages: [],
   };
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
 
 async function deleteStoredAttachmentFiles(paths: string[]): Promise<void> {
@@ -244,7 +307,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       const userMessage = buildUserMessage(conversationId, messageText);
 
       const assistantMessageId = generateChatId();
-      const assistantContent = ChatScreenLabels.DUMMY_ASSISTANT_RESPONSE;
+      const streamingAssistantMessage = buildStreamingAssistantMessage(conversationId, assistantMessageId);
 
       setIsSending(true);
 
@@ -259,7 +322,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
               modelId: options.modelId,
               preview: messageText,
               updatedAt: now,
-              messages: [...(current.messages ?? []), userMessage],
+              messages: [...(current.messages ?? []), userMessage, streamingAssistantMessage],
             },
           };
         });
@@ -295,16 +358,54 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      await delay(DUMMY_RESPONSE_DELAY_MS);
+      const removeStreamingAssistantFromUi = (): void => {
+        if (!isConversationFocused(conversationId)) {
+          return;
+        }
 
-      const assistantMessage = buildAssistantMessage(conversationId, assistantContent, assistantMessageId);
+        setConversationDetails((prev) =>
+          removeAssistantMessageFromConversation(prev, conversationId, assistantMessageId),
+        );
+      };
 
       try {
+        const modelPath = await resolveDownloadedModelPath(options.modelId);
+        if (!modelPath) {
+          throw new Error(ChatScreenLabels.MODEL_UNAVAILABLE);
+        }
+
+        await initializeModel(modelPath);
+      } catch (error) {
+        console.error("Failed to load model for inference:", error);
+        options.onSendError?.(
+          error instanceof Error ? error.message : ChatScreenLabels.MODEL_INIT_FAILED,
+        );
+        removeStreamingAssistantFromUi();
+        setIsSending(false);
+        return;
+      }
+
+      try {
+        const completionResult = await chatCompletion(messageText, (accumulatedText) => {
+          if (!isConversationFocused(conversationId)) {
+            return;
+          }
+
+          setConversationDetails((prev) =>
+            updateStreamingAssistantContent(prev, conversationId, assistantMessageId, accumulatedText),
+          );
+        });
+
+        const assistantMessage: ChatMessage = {
+          ...buildAssistantMessage(conversationId, completionResult.text, assistantMessageId),
+          metrics: completionResult.metrics,
+        };
+
         await createMessage(assistantMessage);
 
         const responseTimestamp = new Date().toISOString();
         await updateConversation(conversationId, {
-          preview: buildConversationPreview(assistantContent),
+          preview: buildConversationPreview(completionResult.text),
           updatedAt: responseTimestamp,
         });
 
@@ -319,9 +420,9 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
               ...prev,
               [conversationId]: {
                 ...current,
-                preview: buildConversationPreview(assistantContent),
+                preview: buildConversationPreview(completionResult.text),
                 updatedAt: responseTimestamp,
-                messages: [...(current.messages ?? []), assistantMessage],
+                messages: replaceAssistantMessage(current.messages ?? [], assistantMessageId, assistantMessage),
               },
             };
           });
@@ -329,8 +430,10 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
         void refreshConversations();
       } catch (error) {
-        console.error("Failed to persist assistant message:", error);
+        console.error("Failed to generate assistant message:", error);
         options.onSendError?.(ChatScreenLabels.INFERENCE_FAILED);
+
+        removeStreamingAssistantFromUi();
       } finally {
         setIsSending(false);
       }

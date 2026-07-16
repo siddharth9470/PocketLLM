@@ -111,8 +111,13 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   const [isModelPickerVisible, setIsModelPickerVisible] = useState(false);
   const [readyModelIds, setReadyModelIds] = useState<Set<string>>(new Set());
   const [isLoadingModel, setIsLoadingModel] = useState(false);
+  const [isModelContextReady, setIsModelContextReady] = useState(false);
 
   const isMountedRef = useRef(true);
+
+  const showChatError = useCallback((message: string) => {
+    Alert.alert(ChatScreenLabels.INFERENCE_ERROR_TITLE, message);
+  }, []);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -120,6 +125,10 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     return () => {
       isMountedRef.current = false;
     };
+  }, []);
+
+  useEffect(() => {
+    setIsModelContextReady(false);
   }, []);
 
   useEffect(() => {
@@ -141,6 +150,37 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     };
   }, [selectedModelId]);
 
+  useEffect(() => {
+    if (!isChatUiMounted || !selectedModelId || !selectedModelPath || !readyModelIds.has(selectedModelId)) {
+      return;
+    }
+
+    let isCancelled = false;
+    setIsLoadingModel(true);
+
+    void initializeModel(selectedModelPath)
+      .then(() => {
+        if (!isCancelled) {
+          setIsModelContextReady(true);
+        }
+      })
+      .catch((error) => {
+        if (!isCancelled) {
+          setSelectedModelId(undefined);
+          showChatError(error instanceof Error ? error.message : ChatScreenLabels.MODEL_INIT_FAILED);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsLoadingModel(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isChatUiMounted, readyModelIds, selectedModelId, selectedModelPath, showChatError]);
+
   const headerHeight = 130;
 
   const refreshReadyModels = useCallback(async () => {
@@ -152,11 +192,9 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     }
   }, []);
 
-  const isModelReady = Boolean(selectedModelId && readyModelIds.has(selectedModelId));
-
-  const showChatError = useCallback((message: string) => {
-    Alert.alert(ChatScreenLabels.INFERENCE_ERROR_TITLE, message);
-  }, []);
+  const isModelReady = Boolean(
+    selectedModelId && readyModelIds.has(selectedModelId) && isModelContextReady && !isLoadingModel,
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -301,6 +339,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
         await initializeModel(modelPath);
         setSelectedModelPath(modelPath);
+        setIsModelContextReady(true);
         setReadyModelIds((prev) => new Set(prev).add(model.id));
         void setConversationModel(conversationId, model.id);
       } catch (error) {
