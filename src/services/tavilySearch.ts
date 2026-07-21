@@ -40,11 +40,6 @@ function formatSearchResults(data: TavilySearchResponse): string {
 
 export async function searchWeb(query: string): Promise<WebSearchResult> {
   const apiKey = getTavilyApiKey();
-  console.log("[tavilySearch] API key configured:", Boolean(apiKey));
-  if (apiKey) {
-    console.log("[tavilySearch] API key prefix:", `${apiKey.slice(0, 8)}...`);
-  }
-
   if (!apiKey) {
     throw new Error("Tavily API key is not configured.");
   }
@@ -74,10 +69,11 @@ export async function searchWeb(query: string): Promise<WebSearchResult> {
   const answer = data.answer?.trim() ?? null;
   const resultCount = data.results?.length ?? 0;
 
-  console.log("[tavilySearch] Answer:", answer);
-  console.log("[tavilySearch] Result count:", resultCount);
-  console.log("[tavilySearch] Response time (ms):", data.response_time);
-  console.log("[tavilySearch] Formatted results:", formatted);
+  console.log(
+    "[tavilySearch] Done:",
+    answer ? `answer="${answer}"` : "no answer",
+    `| results=${resultCount}`,
+  );
 
   return { answer, formatted, resultCount };
 }
