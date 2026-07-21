@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { initializeAllDatabases } from "@/db";
+import { logTavilyConfigStatus } from "@/config/env";
 import CentralNavigator from "@/navigation/CentralNavigator";
 import { ChatStoreProvider } from "@/stores/chatStore";
 
@@ -20,6 +21,8 @@ export default function App() {
   const [isDbReady, setIsDbReady] = useState(false);
 
   useEffect(() => {
+    logTavilyConfigStatus();
+
     initializeAllDatabases()
       .then(() => setIsDbReady(true))
       .catch((error) => {

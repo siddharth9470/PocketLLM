@@ -386,15 +386,34 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const completionResult = await chatCompletion(messageText, (accumulatedText) => {
-          if (!isConversationFocused(conversationId)) {
-            return;
-          }
+        const completionResult = await chatCompletion(
+          messageText,
+          (accumulatedText) => {
+            if (!isConversationFocused(conversationId)) {
+              return;
+            }
 
-          setConversationDetails((prev) =>
-            updateStreamingAssistantContent(prev, conversationId, assistantMessageId, accumulatedText),
-          );
-        });
+            setConversationDetails((prev) =>
+              updateStreamingAssistantContent(prev, conversationId, assistantMessageId, accumulatedText),
+            );
+          },
+          {
+            onSearching: () => {
+              if (!isConversationFocused(conversationId)) {
+                return;
+              }
+
+              setConversationDetails((prev) =>
+                updateStreamingAssistantContent(
+                  prev,
+                  conversationId,
+                  assistantMessageId,
+                  ChatScreenLabels.SEARCHING_WEB,
+                ),
+              );
+            },
+          },
+        );
 
         const assistantMessage: ChatMessage = {
           ...buildAssistantMessage(conversationId, completionResult.text, assistantMessageId),
