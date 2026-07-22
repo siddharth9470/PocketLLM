@@ -32,6 +32,6 @@ export function logTavilyConfigStatus(): void {
   }
 
   console.warn(
-    "[env] EXPO_PUBLIC_TAVILY_API_KEY is missing. Add it to .env.local, then restart Metro: npx expo start -c",
+    "[env] EXPO_PUBLIC_TAVILY_API_KEY is missing. Add it to .env.development (or .env.production), then restart Metro: npx expo start -c",
   );
 }

@@ -3,15 +3,21 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "expo start",
-    "android": "expo run:android",
-    "android:release": "bash scripts/build-android-release.sh",
-    "android:rebuild": "bash scripts/rebuild-android-native.sh && expo run:android",
-    "ios": "expo run:ios",
-    "web": "expo start --web",
+    "start": "npm run start:development",
+    "start:development": "NODE_ENV=development expo start",
+    "start:production": "NODE_ENV=production expo start",
+    "android": "npm run android:development",
+    "android:development": "NODE_ENV=development expo run:android",
+    "android:production": "NODE_ENV=production expo run:android --variant release",
+    "android:release": "NODE_ENV=production bash scripts/build-android-release.sh",
+    "android:rebuild": "bash scripts/rebuild-android-native.sh && npm run android:development",
+    "ios": "npm run ios:development",
+    "ios:development": "NODE_ENV=development expo run:ios",
+    "ios:production": "NODE_ENV=production expo run:ios --configuration Release",
+    "web": "NODE_ENV=development expo start --web",
     "launch-android-emulator": "~/Library/Android/sdk/emulator/emulator -avd Medium_Phone",
-    "test": "jest",
-    "test:watch": "jest --watch"
+    "test": "NODE_ENV=test jest",
+    "test:watch": "NODE_ENV=test jest --watch"
   },
   "op-sqlite": {
     "sqlcipher": true
