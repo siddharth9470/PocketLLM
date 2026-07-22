@@ -44,7 +44,7 @@ export default function AppHeader(props: NativeStackHeaderProps) {
     }
 
     if (!canGoBack || options.headerBackVisible === false) {
-      return <View style={styles.sideSlot} />;
+      return <View style={styles.sideSpacer} />;
     }
 
     return (
@@ -60,11 +60,7 @@ export default function AppHeader(props: NativeStackHeaderProps) {
     );
   })();
 
-  const rightContent = options.headerRight ? (
-    <View style={styles.sideSlot}>{options.headerRight(headerItemProps)}</View>
-  ) : (
-    <View style={styles.sideSlot} />
-  );
+  const rightContent = options.headerRight?.(headerItemProps) ?? null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -73,7 +69,7 @@ export default function AppHeader(props: NativeStackHeaderProps) {
         <View style={styles.titleSlot} pointerEvents="none">
           {titleContent}
         </View>
-        <View style={styles.rightSlot}>{rightContent}</View>
+        <View style={styles.rightSlot}>{rightContent ?? <View style={styles.sideSpacer} />}</View>
       </View>
     </View>
   );
@@ -88,6 +84,7 @@ const createStyles = (colors: ThemeColors) =>
       height: HEADER_BAR_HEIGHT,
       flexDirection: "row",
       alignItems: "center",
+      justifyContent: "space-between",
     },
     leftSlot: {
       minWidth: SIDE_SLOT_MIN_WIDTH,
@@ -103,10 +100,8 @@ const createStyles = (colors: ThemeColors) =>
       paddingRight: spacing.sm,
       zIndex: 1,
     },
-    sideSlot: {
+    sideSpacer: {
       minWidth: SIDE_SLOT_MIN_WIDTH,
-      alignItems: "center",
-      justifyContent: "center",
     },
     backButton: {
       minWidth: SIDE_SLOT_MIN_WIDTH,
