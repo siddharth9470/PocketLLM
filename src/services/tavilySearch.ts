@@ -69,11 +69,7 @@ export async function searchWeb(query: string): Promise<WebSearchResult> {
   const answer = data.answer?.trim() ?? null;
   const resultCount = data.results?.length ?? 0;
 
-  console.log(
-    "[tavilySearch] Done:",
-    answer ? `answer="${answer}"` : "no answer",
-    `| results=${resultCount}`,
-  );
+  console.log("[tavilySearch] Done:", answer ? `answer="${answer}"` : "no answer", `| results=${resultCount}`);
 
   return { answer, formatted, resultCount };
 }

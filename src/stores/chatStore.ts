@@ -377,9 +377,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         await initializeModel(modelPath);
       } catch (error) {
         console.error("Failed to load model for inference:", error);
-        options.onSendError?.(
-          error instanceof Error ? error.message : ChatScreenLabels.MODEL_INIT_FAILED,
-        );
+        options.onSendError?.(error instanceof Error ? error.message : ChatScreenLabels.MODEL_INIT_FAILED);
         removeStreamingAssistantFromUi();
         setIsSending(false);
         return;

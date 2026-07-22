@@ -3,6 +3,7 @@
  * Model load/release lives in `src/services/inference/llamaRuntime.ts`.
  */
 
+export { chatCompletion } from "@/services/inference/chatCompletion";
 export {
   getActiveContext,
   getCachedJinjaSupported,
@@ -12,5 +13,3 @@ export {
   releaseModelForPath,
   resolveDownloadedModelPath,
 } from "@/services/inference/llamaRuntime";
-
-export { chatCompletion } from "@/services/inference/chatCompletion";

@@ -33,7 +33,10 @@ jest.mock("@/services/chatHelper", () => ({
 jest.mock("@/utils/chatIds", () => {
   let chatIdCounter = 0;
   return {
-    generateChatId: jest.fn(() => `chat-id-${(chatIdCounter += 1)}`),
+    generateChatId: jest.fn(() => {
+      chatIdCounter += 1;
+      return `chat-id-${chatIdCounter}`;
+    }),
     deriveConversationTitle: (prompt: string) => prompt.trim().slice(0, 50),
   };
 });

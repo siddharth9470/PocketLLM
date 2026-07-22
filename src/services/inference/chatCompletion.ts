@@ -1,11 +1,6 @@
 import type { CompletionParams, NativeCompletionResult, RNLlamaOAICompatibleMessage } from "llama.rn";
-
-import {
-  CHAT_ANSWER_WITH_SEARCH_PROMPT,
-  CHAT_SYSTEM_PROMPT,
-  WEB_SEARCH_TOOL,
-} from "@/constants/chat";
 import { isTavilyConfigured } from "@/config/env";
+import { CHAT_ANSWER_WITH_SEARCH_PROMPT, CHAT_SYSTEM_PROMPT, WEB_SEARCH_TOOL } from "@/constants/chat";
 import { getActiveContext } from "@/services/inference/llamaRuntime";
 import {
   looksLikeTextToolCall,
@@ -98,10 +93,7 @@ async function generateReplyWithToolCalling(
 ): Promise<ChatCompletionResult> {
   console.log(`${LOG_PREFIX} Pass 1: checking if model calls web_search (no streaming)`);
 
-  const toolSelectionResponse = await runModelCompletion(
-    buildConversationMessages(userPrompt),
-    "toolSelection",
-  );
+  const toolSelectionResponse = await runModelCompletion(buildConversationMessages(userPrompt), "toolSelection");
   const webSearchRequest = resolveWebSearchToolCall(toolSelectionResponse, userPrompt);
 
   if (webSearchRequest) {
@@ -118,17 +110,10 @@ async function generateReplyWithToolCalling(
 /**
  * Single-pass reply when web search is unavailable. Tokens stream via `onToken`.
  */
-async function generateDirectReply(
-  userPrompt: string,
-  onToken?: StreamTokenHandler,
-): Promise<ChatCompletionResult> {
+async function generateDirectReply(userPrompt: string, onToken?: StreamTokenHandler): Promise<ChatCompletionResult> {
   console.log(`${LOG_PREFIX} Streaming direct answer (no tools configured)`);
 
-  const directChatResponse = await runModelCompletion(
-    buildConversationMessages(userPrompt),
-    "directChat",
-    onToken,
-  );
+  const directChatResponse = await runModelCompletion(buildConversationMessages(userPrompt), "directChat", onToken);
   const assistantMessageContent = readAssistantContent(directChatResponse);
 
   console.log(`${LOG_PREFIX} Response:`, assistantMessageContent);
@@ -172,8 +157,7 @@ async function generateGroundedReply(
   } catch (error) {
     console.error(`${LOG_PREFIX} Pass 2 failed, falling back to Tavily answer:`, error);
 
-    const fallbackAnswer =
-      searchResult.answer ?? searchResult.formatted.slice(0, MAX_SEARCH_CONTEXT_CHARS);
+    const fallbackAnswer = searchResult.answer ?? searchResult.formatted.slice(0, MAX_SEARCH_CONTEXT_CHARS);
     streamToken(onToken, fallbackAnswer);
     return { text: fallbackAnswer };
   }
@@ -202,10 +186,7 @@ async function runModelCompletion(
 }
 
 /** Builds llama.rn completion params tuned for the given completion purpose. */
-function buildCompletionParams(
-  messages: ChatCompletionMessage[],
-  purpose: CompletionPurpose,
-): CompletionParams {
+function buildCompletionParams(messages: ChatCompletionMessage[], purpose: CompletionPurpose): CompletionParams {
   return {
     messages: toNativeMessages(messages),
     n_predict: 512,
@@ -231,10 +212,7 @@ function buildConversationMessages(userPrompt: string): ChatCompletionMessage[] 
  * Messages for the grounded-answer pass. Search results are embedded in the user
  * turn (not an OAI `tool` role) for broad on-device model compatibility.
  */
-function buildSearchGroundedMessages(
-  userPrompt: string,
-  groundedSearchContext: string,
-): ChatCompletionMessage[] {
+function buildSearchGroundedMessages(userPrompt: string, groundedSearchContext: string): ChatCompletionMessage[] {
   return [
     { role: "system", content: CHAT_ANSWER_WITH_SEARCH_PROMPT },
     {

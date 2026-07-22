@@ -370,7 +370,9 @@ class ChatDatabaseManager {
   }
 
   /** Loads attachment rows for a batch of message ids and groups them by message. */
-  private async getAttachmentsGroupedByMessageId(messageIds: string[]): Promise<Record<string, ChatMessageAttachment[]>> {
+  private async getAttachmentsGroupedByMessageId(
+    messageIds: string[],
+  ): Promise<Record<string, ChatMessageAttachment[]>> {
     if (messageIds.length === 0) {
       return {};
     }
@@ -411,10 +413,9 @@ class ChatDatabaseManager {
 
   public async getAttachmentStoragePathsByConversationId(conversationId: string): Promise<string[]> {
     const connection = this.getDatabaseConnection();
-    const result = await connection.execute(
-      "SELECT storage_path FROM message_attachments WHERE conversation_id = ?;",
-      [conversationId],
-    );
+    const result = await connection.execute("SELECT storage_path FROM message_attachments WHERE conversation_id = ?;", [
+      conversationId,
+    ]);
 
     return result.rows.map((row) => String((row as { storage_path: string }).storage_path));
   }

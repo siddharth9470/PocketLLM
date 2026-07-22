@@ -17,7 +17,14 @@
     "web": "NODE_ENV=development expo start --web",
     "launch-android-emulator": "~/Library/Android/sdk/emulator/emulator -avd Medium_Phone",
     "test": "NODE_ENV=test jest",
-    "test:watch": "NODE_ENV=test jest --watch"
+    "test:watch": "NODE_ENV=test jest --watch",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "check:ci": "biome ci ."
   },
   "op-sqlite": {
     "sqlcipher": true

@@ -1,18 +1,15 @@
-const GEMMA4_THOUGHT_BLOCK =
-  /<\|channel>(?:thought|analysis|commentary|reasoning)[\s\S]*?<channel\|>/gi;
+const GEMMA4_THOUGHT_BLOCK = /<\|channel>(?:thought|analysis|commentary|reasoning)[\s\S]*?<channel\|>/gi;
 
 const XML_THOUGHT_TO_FINAL_BLOCK =
   /<channel>(?:thought|analysis|commentary|reasoning)<\/channel>[\s\S]*?(?=<channel>(?:final|answer|response)<\/channel>)/gi;
 
 const XML_FINAL_CHANNEL_MARKER = /<channel>(?:final|answer|response)<\/channel>\s*/gi;
 
-const XML_THOUGHT_CHANNEL_TAG =
-  /<channel>(?:thought|analysis|commentary|reasoning)<\/channel>\s*/gi;
+const XML_THOUGHT_CHANNEL_TAG = /<channel>(?:thought|analysis|commentary|reasoning)<\/channel>\s*/gi;
 
 const XML_REASONING_TAGS = /<(think|thinking|reasoning|analysis)>[\s\S]*?<\/\1>/gi;
 
-const ORPHAN_CHANNEL_MARKERS =
-  /<\|channel>(?:thought|analysis|commentary|reasoning)\s*|<channel\|>|<\|channel>/gi;
+const ORPHAN_CHANNEL_MARKERS = /<\|channel>(?:thought|analysis|commentary|reasoning)\s*|<channel\|>|<\|channel>/gi;
 
 const REASONING_PATTERNS: RegExp[] = [
   GEMMA4_THOUGHT_BLOCK,
@@ -55,8 +52,7 @@ export function sanitizeAssistantResponse(raw: string, parsedContent?: string): 
   return stripReasoningTags(source);
 }
 
-const INCOMPLETE_GEMMA4_THOUGHT =
-  /<\|channel>(?:thought|analysis|commentary|reasoning)[\s\S]*$/i;
+const INCOMPLETE_GEMMA4_THOUGHT = /<\|channel>(?:thought|analysis|commentary|reasoning)[\s\S]*$/i;
 
 const INCOMPLETE_XML_THOUGHT_TO_FINAL =
   /<channel>(?:thought|analysis|commentary|reasoning)<\/channel>[\s\S]*?(?=<channel>(?:final|answer|response)<\/channel>|$)/i;

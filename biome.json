@@ -1,22 +1,66 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
-  "files": {
-    "includes": ["**", "!**/android", "!**/ios", "!**/node_modules", "!**/dist", "!**/build"]
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
   },
-  "linter": {
-    "enabled": true
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/android",
+      "!**/ios",
+      "!**/.expo",
+      "!**/dist",
+      "!**/build",
+      "!**/coverage",
+      "!**/.claude",
+      "!**/.cursor",
+      "!**/expo-env.d.ts"
+    ]
   },
   "formatter": {
     "enabled": true,
     "formatWithErrors": false,
     "indentStyle": "space",
     "indentWidth": 2,
-    "lineWidth": 120
+    "lineWidth": 120,
+    "lineEnding": "lf"
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
   },
   "javascript": {
     "formatter": {
       "semicolons": "always",
-      "trailingCommas": "all"
+      "trailingCommas": "all",
+      "quoteStyle": "double",
+      "jsxQuoteStyle": "double"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**", "**/jest.setup.ts", "**/*.d.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    }
+  ]
 }
