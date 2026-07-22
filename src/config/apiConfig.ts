@@ -6,7 +6,7 @@ export const HUGGING_FACE_ENDPOINTS = {
 
 const HUGGING_FACE_MODEL_LIST_SEARCH = {
   search: "gguf",
-  limit: 40,
+  limit: 100,
   sort: "downloads",
   direction: -1,
   // Keep list payload light; fetch gguf/blobs only on model details.

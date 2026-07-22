@@ -7,6 +7,10 @@ declare global {
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+jest.mock("@react-native-async-storage/async-storage", () =>
+  require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
+);
+
 jest.mock("@op-engineering/op-sqlite", () => {
   const { mockExecute } = require("@tests/testUtils");
   return {

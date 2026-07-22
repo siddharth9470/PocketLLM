@@ -1,9 +1,7 @@
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Keyboard,
   Pressable,
   StyleSheet,
@@ -22,23 +20,20 @@ import {
   Send,
 } from "react-native-gifted-chat";
 
+import { useDialog } from "@/components/AppDialog";
 import { ChatMessageMarkdown } from "@/components/ChatMessageMarkdown";
 import ModelPicker from "@/components/ModelPicker";
 import { ChatScreenLabels } from "@/constants/chat";
-import { colors, radii, spacing, typography } from "@/constants/theme";
+import { radii, spacing, type ThemeColors, typography } from "@/constants/theme";
 import { getDownloadedModelsList } from "@/db/ModelDB";
 import type { ChatsStackScreenProps } from "@/navigation/types";
-import {
-  classifyInferenceError,
-  initializeModel,
-  releaseModel,
-  resolveDownloadedModelPath,
-} from "@/services/chatHelper";
+import { initializeModel, resolveDownloadedModelPath } from "@/services/chatHelper";
 import { useChatStore } from "@/stores/chatStore";
+import { useTheme } from "@/theme/ThemeProvider";
 import type { HuggingFaceModel } from "@/types/models";
 import { generateChatId } from "@/utils/chatIds";
 import { isLanguageModelGgufFilename } from "@/utils/ggufFileSelection";
-import { CHAT_ASSISTANT, CHAT_USER, type PocketChatMessage, toGiftedChatMessages } from "@/utils/giftedChatAdapter";
+import { CHAT_USER, type PocketChatMessage, toGiftedChatMessages } from "@/utils/giftedChatAdapter";
 
 const COMPOSER_LINE_HEIGHT = 22;
 const COMPOSER_VERTICAL_PADDING = spacing.sm * 2;
@@ -47,6 +42,8 @@ const COMPOSER_MAX_LINES = 6;
 const COMPOSER_MAX_HEIGHT = COMPOSER_LINE_HEIGHT * COMPOSER_MAX_LINES + COMPOSER_VERTICAL_PADDING;
 
 function ChatComposer({ text = "", textInputProps }: ComponentProps<typeof Composer>) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [inputHeight, setInputHeight] = useState(COMPOSER_MIN_HEIGHT);
 
   useEffect(() => {
@@ -67,20 +64,22 @@ function ChatComposer({ text = "", textInputProps }: ComponentProps<typeof Compo
   );
 
   const placeholder = textInputProps?.placeholder ?? ChatScreenLabels.COMPOSER_PLACEHOLDER;
+  const accessibilityLabel =
+    textInputProps?.accessibilityLabel ?? (placeholder.length > 0 ? placeholder : ChatScreenLabels.MODEL_SELECT_PROMPT);
 
   return (
     <View style={styles.composerContainer}>
       <TextInput
         {...textInputProps}
-        testID={placeholder}
+        testID={placeholder.length > 0 ? placeholder : ChatScreenLabels.COMPOSER_PLACEHOLDER}
         accessible
-        accessibilityLabel={placeholder}
+        accessibilityLabel={accessibilityLabel}
         value={text}
         multiline
         scrollEnabled={inputHeight >= COMPOSER_MAX_HEIGHT}
         enablesReturnKeyAutomatically
         underlineColorAndroid="transparent"
-        keyboardAppearance="light"
+        keyboardAppearance="dark"
         placeholder={placeholder}
         onContentSizeChange={handleContentSizeChange}
         style={[styles.composerInput, { height: Math.max(COMPOSER_MIN_HEIGHT, inputHeight) }, textInputProps?.style]}
@@ -100,22 +99,34 @@ function isDownloadReadyModel(model: HuggingFaceModel): boolean {
 
 export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<"Chat">) {
   const { conversationId } = route.params;
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const showDialog = useDialog();
 
   const conversation = useChatStore((state) => state.conversationDetails[conversationId]);
   const loadConversation = useChatStore((state) => state.loadConversation);
   const sendMessage = useChatStore((state) => state.sendMessage);
-  const continueAssistantMessage = useChatStore((state) => state.continueAssistantMessage);
   const setConversationModel = useChatStore((state) => state.setConversationModel);
   const setActiveConversationId = useChatStore((state) => state.setActiveConversationId);
   const isSending = useChatStore((state) => state.isSending);
 
   const [selectedModelId, setSelectedModelId] = useState<string | undefined>(conversation?.modelId);
+  const [selectedModelPath, setSelectedModelPath] = useState<string | undefined>();
   const [isInitialLoad, setIsInitialLoad] = useState(() => conversation === undefined);
   const [isChatUiMounted, setIsChatUiMounted] = useState(false);
   const [isModelPickerVisible, setIsModelPickerVisible] = useState(false);
   const [readyModelIds, setReadyModelIds] = useState<Set<string>>(new Set());
+  const [isLoadingModel, setIsLoadingModel] = useState(false);
+  const [isModelContextReady, setIsModelContextReady] = useState(false);
 
   const isMountedRef = useRef(true);
+
+  const showChatError = useCallback(
+    (message: string) => {
+      showDialog({ title: ChatScreenLabels.INFERENCE_ERROR_TITLE, message });
+    },
+    [showDialog],
+  );
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -124,6 +135,60 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
       isMountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    setIsModelContextReady(false);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedModelId) {
+      setSelectedModelPath(undefined);
+      return;
+    }
+
+    let isCancelled = false;
+
+    void resolveDownloadedModelPath(selectedModelId).then((path) => {
+      if (!isCancelled && path) {
+        setSelectedModelPath(path);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedModelId]);
+
+  useEffect(() => {
+    if (!isChatUiMounted || !selectedModelId || !selectedModelPath || !readyModelIds.has(selectedModelId)) {
+      return;
+    }
+
+    let isCancelled = false;
+    setIsLoadingModel(true);
+
+    void initializeModel(selectedModelPath)
+      .then(() => {
+        if (!isCancelled) {
+          setIsModelContextReady(true);
+        }
+      })
+      .catch((error) => {
+        if (!isCancelled) {
+          setSelectedModelId(undefined);
+          showChatError(error instanceof Error ? error.message : ChatScreenLabels.MODEL_INIT_FAILED);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsLoadingModel(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isChatUiMounted, readyModelIds, selectedModelId, selectedModelPath, showChatError]);
 
   const headerHeight = 130;
 
@@ -136,11 +201,9 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
     }
   }, []);
 
-  const isModelReady = Boolean(selectedModelId && readyModelIds.has(selectedModelId));
-
-  const showInferenceError = useCallback((message: string) => {
-    Alert.alert(ChatScreenLabels.INFERENCE_ERROR_TITLE, message);
-  }, []);
+  const isModelReady = Boolean(
+    selectedModelId && readyModelIds.has(selectedModelId) && isModelContextReady && !isLoadingModel,
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -162,7 +225,6 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         Keyboard.dismiss();
         setIsChatUiMounted(false);
         setIsModelPickerVisible(false);
-        void releaseModel();
       };
     }, [conversationId, loadConversation, refreshReadyModels, setActiveConversationId]),
   );
@@ -216,13 +278,6 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
   const giftedMessages = useMemo(() => toGiftedChatMessages(conversation?.messages ?? []), [conversation?.messages]);
 
-  const hasStreamingContent = useMemo(
-    () =>
-      conversation?.messages?.some((message) => message.status === "streaming" && message.content.trim().length > 0) ??
-      false,
-    [conversation?.messages],
-  );
-
   const handleSend = useCallback(
     (messages: IMessage[] = []) => {
       if (isSending || !isModelReady || !selectedModelId) {
@@ -232,7 +287,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         return;
       }
 
-      const text = messages[0]?.text.trim();
+      const text = messages[0]?.text.trim() ?? "";
       if (!text) {
         return;
       }
@@ -241,10 +296,10 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
       void sendMessage(conversationId, text, {
         modelId: selectedModelId,
-        onInferenceError: showInferenceError,
+        onSendError: showChatError,
       });
     },
-    [conversationId, isModelReady, isSending, selectedModelId, sendMessage, showInferenceError],
+    [conversationId, isModelReady, isSending, selectedModelId, sendMessage, showChatError],
   );
 
   const renderInputToolbar = useCallback(
@@ -255,41 +310,59 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         primaryStyle={styles.inputToolbarPrimary}
       />
     ),
-    [],
+    [styles],
   );
 
   const renderComposer = useCallback((props: ComponentProps<typeof Composer>) => <ChatComposer {...props} />, []);
 
-  const composerTextInputProps = useMemo(
-    () => ({
+  const composerTextInputProps = useMemo(() => {
+    const placeholder = isModelReady
+      ? ChatScreenLabels.COMPOSER_PLACEHOLDER
+      : isLoadingModel
+        ? ChatScreenLabels.MODEL_LOADING
+        : "";
+
+    const accessibilityLabel = isModelReady
+      ? ChatScreenLabels.COMPOSER_PLACEHOLDER
+      : isLoadingModel
+        ? ChatScreenLabels.MODEL_LOADING
+        : ChatScreenLabels.MODEL_SELECT_PROMPT;
+
+    return {
       editable: isModelReady,
-      placeholder: isModelReady ? ChatScreenLabels.COMPOSER_PLACEHOLDER : ChatScreenLabels.MODEL_REQUIRED,
+      placeholder,
+      accessibilityLabel,
       placeholderTextColor: colors.textSecondary,
-    }),
-    [isModelReady],
-  );
+    };
+  }, [isLoadingModel, isModelReady, colors]);
 
   const handleSelectModel = useCallback(
     async (model: HuggingFaceModel) => {
-      const modelPath = await resolveDownloadedModelPath(model.id);
-      if (!modelPath) {
-        showInferenceError(ChatScreenLabels.MODEL_UNAVAILABLE);
-        return;
-      }
+      setIsLoadingModel(true);
+      setSelectedModelId(model.id);
+      setIsModelPickerVisible(false);
 
       try {
-        await initializeModel(modelPath);
-      } catch (error) {
-        showInferenceError(classifyInferenceError(error).userMessage);
-        return;
-      }
+        const modelPath = await resolveDownloadedModelPath(model.id);
+        if (!modelPath) {
+          setSelectedModelId(undefined);
+          showChatError(ChatScreenLabels.MODEL_UNAVAILABLE);
+          return;
+        }
 
-      setSelectedModelId(model.id);
-      setReadyModelIds((prev) => new Set(prev).add(model.id));
-      setIsModelPickerVisible(false);
-      void setConversationModel(conversationId, model.id);
+        await initializeModel(modelPath);
+        setSelectedModelPath(modelPath);
+        setIsModelContextReady(true);
+        setReadyModelIds((prev) => new Set(prev).add(model.id));
+        void setConversationModel(conversationId, model.id);
+      } catch (error) {
+        setSelectedModelId(undefined);
+        showChatError(error instanceof Error ? error.message : ChatScreenLabels.MODEL_INIT_FAILED);
+      } finally {
+        setIsLoadingModel(false);
+      }
     },
-    [conversationId, setConversationModel, showInferenceError],
+    [conversationId, setConversationModel, showChatError],
   );
 
   const renderSend = useCallback(
@@ -298,23 +371,14 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         return null;
       }
 
+      const hasText = (props.text?.trim().length ?? 0) > 0;
+      if (!hasText) {
+        return null;
+      }
+
       return <Send {...props} />;
     },
     [isModelReady],
-  );
-
-  const handleContinueResponse = useCallback(
-    (messageId: string) => {
-      if (isSending || !isModelReady || !selectedModelId) {
-        return;
-      }
-
-      void continueAssistantMessage(conversationId, messageId, {
-        modelId: selectedModelId,
-        onInferenceError: showInferenceError,
-      });
-    },
-    [continueAssistantMessage, conversationId, isModelReady, isSending, selectedModelId, showInferenceError],
   );
 
   const renderMessageText = useCallback((props: MessageTextProps<PocketChatMessage>) => {
@@ -327,34 +391,16 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   }, []);
 
   const renderBubble = useCallback(
-    (props: ComponentProps<typeof Bubble>) => {
-      const currentMessage = props.currentMessage as PocketChatMessage | undefined;
-      const showContinue =
-        currentMessage?.truncated === true && currentMessage.user._id === CHAT_ASSISTANT._id && !isSending;
-
-      return (
-        <View style={styles.bubbleContainer}>
-          <Bubble
-            {...props}
-            wrapperStyle={{
-              left: styles.assistantBubble,
-              right: styles.userBubble,
-            }}
-          />
-          {showContinue ? (
-            <Pressable
-              style={styles.continueButton}
-              onPress={() => handleContinueResponse(String(currentMessage._id))}
-              accessibilityRole="button"
-              accessibilityLabel={ChatScreenLabels.CONTINUE_RESPONSE_ACCESSIBILITY}
-            >
-              <Text style={styles.continueButtonText}>{ChatScreenLabels.CONTINUE_RESPONSE}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      );
-    },
-    [handleContinueResponse, isSending],
+    (props: ComponentProps<typeof Bubble>) => (
+      <Bubble
+        {...props}
+        wrapperStyle={{
+          left: styles.assistantBubble,
+          right: styles.userBubble,
+        }}
+      />
+    ),
+    [styles],
   );
 
   if (isInitialLoad && conversation === undefined) {
@@ -390,7 +436,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
             messages={giftedMessages}
             onSend={handleSend}
             user={CHAT_USER}
-            colorScheme="light"
+            colorScheme="dark"
             messageIdGenerator={generateChatId}
             renderBubble={renderBubble}
             renderMessageText={renderMessageText}
@@ -400,7 +446,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
             isSendButtonAlwaysVisible
             renderAvatar={() => null}
             isUserAvatarVisible={false}
-            isTyping={isSending && !hasStreamingContent}
+            isTyping={isSending}
             messagesContainerStyle={styles.messagesContainer}
             textInputProps={composerTextInputProps}
             keyboardAvoidingViewProps={{
@@ -413,92 +459,74 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.background,
-  },
-  modelPromptBanner: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.chipBackground,
-  },
-  modelPromptText: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: "center",
-  },
-  modelPickerRow: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-    alignItems: "flex-end",
-  },
-  chatContainer: {
-    flex: 1,
-  },
-  messagesContainer: {
-    backgroundColor: colors.background,
-  },
-  inputToolbarContainer: {
-    backgroundColor: colors.background,
-    borderTopColor: colors.border,
-  },
-  inputToolbarPrimary: {
-    alignItems: "flex-end",
-    backgroundColor: colors.background,
-  },
-  composerContainer: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  composerInput: {
-    ...typography.body,
-    color: colors.text,
-    backgroundColor: colors.chipBackground,
-    borderRadius: radii.lg,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    marginHorizontal: spacing.sm,
-    lineHeight: COMPOSER_LINE_HEIGHT,
-    textAlignVertical: "center",
-  },
-  userBubble: {
-    backgroundColor: colors.userBubble,
-    borderBottomRightRadius: radii.sm,
-  },
-  assistantBubble: {
-    backgroundColor: colors.assistantBubble,
-    borderBottomLeftRadius: radii.sm,
-  },
-  bubbleContainer: {
-    maxWidth: "100%",
-  },
-  continueButton: {
-    alignSelf: "flex-start",
-    marginTop: spacing.xs,
-    marginLeft: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    backgroundColor: colors.chipBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.primary,
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  continueButtonText: {
-    ...typography.caption,
-    color: colors.primary,
-    fontWeight: "600",
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    loadingContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.background,
+    },
+    modelPromptBanner: {
+      marginHorizontal: spacing.lg,
+      marginTop: spacing.sm,
+      padding: spacing.md,
+      borderRadius: radii.lg,
+      backgroundColor: colors.chipBackground,
+    },
+    modelPromptText: {
+      ...typography.body,
+      color: colors.textSecondary,
+      textAlign: "center",
+    },
+    modelPickerRow: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.xs,
+      alignItems: "flex-end",
+    },
+    chatContainer: {
+      flex: 1,
+    },
+    messagesContainer: {
+      backgroundColor: colors.background,
+    },
+    inputToolbarContainer: {
+      backgroundColor: colors.background,
+      borderTopColor: colors.border,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      paddingBottom: spacing.xs,
+    },
+    inputToolbarPrimary: {
+      alignItems: "flex-end",
+      backgroundColor: colors.background,
+    },
+    composerContainer: {
+      flex: 1,
+      justifyContent: "center",
+    },
+    composerInput: {
+      ...typography.body,
+      color: colors.text,
+      backgroundColor: colors.chipBackground,
+      borderRadius: radii.lg,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.sm,
+      marginHorizontal: spacing.sm,
+      lineHeight: COMPOSER_LINE_HEIGHT,
+      textAlignVertical: "center",
+    },
+    userBubble: {
+      backgroundColor: colors.userBubble,
+      borderBottomRightRadius: radii.sm,
+    },
+    assistantBubble: {
+      backgroundColor: colors.assistantBubble,
+      borderBottomLeftRadius: radii.sm,
+    },
+  });

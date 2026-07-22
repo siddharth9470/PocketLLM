@@ -3,10 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { ModelFilterField, SORT_FIELD_CONFIG, type SortField, type SortOption } from "@/constants/modelFilters";
 import type { HuggingFaceModel } from "@/types/models";
 
-export function useModelFilterSort(
-  models: HuggingFaceModel[],
-  downloadedModelIds: Record<string, boolean> = {},
-) {
+export function useModelFilterSort(models: HuggingFaceModel[], downloadedModelIds: Record<string, boolean> = {}) {
   const [sortBy, setSortBy] = useState<SortOption>(null);
   const [selectedAuthor, setSelectedAuthor] = useState<string | null>(null);
   const [selectedPipelineTag, setSelectedPipelineTag] = useState<string | null>(null);

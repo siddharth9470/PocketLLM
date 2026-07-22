@@ -1,3 +1,36 @@
+export const CHAT_SYSTEM_PROMPT = `You are PocketLLM, a helpful on-device assistant.
+
+When the user asks about current events, recent news, live data (weather, prices, scores, stock quotes), specific facts you are unsure about, or anything that requires up-to-date information, you MUST call the web_search tool instead of guessing.
+
+Never invent facts, dates, numbers, or news. If you do not know and the question needs real-world data, call web_search.
+
+For general knowledge you are confident about, answer directly without searching.`;
+
+export const CHAT_ANSWER_WITH_SEARCH_PROMPT = `You are PocketLLM, a helpful assistant.
+
+Web search results are provided below. Answer the user's question using those results. Include specific prices, dates, and facts when present. Be concise. Do not call tools.`;
+
+export const WEB_SEARCH_TOOL = [
+  {
+    type: "function",
+    function: {
+      name: "web_search",
+      description:
+        "Search the public web for current events, live data, recent news, or factual information you cannot answer confidently from training data alone.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Concise search query for the information needed.",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+] as const;
+
 export const ChatScreenLabels = {
   EMPTY_STATE: "There is no chat.",
   CREATE_NEW_CHAT: "Create New Chat",
@@ -9,36 +42,19 @@ export const ChatScreenLabels = {
   DELETE_CHAT_ACCESSIBILITY: "Delete chat",
   NEW_CHAT_TITLE: "New Chat",
   COMPOSER_PLACEHOLDER: "Type a message...",
-  MODEL_REQUIRED: "Select a downloaded model to start chatting.",
+  MODEL_LOADING: "Loading a model.",
   MODEL_SELECT_TITLE: "Select a Model",
   MODEL_SELECT_PROMPT: "Choose a downloaded model before sending messages.",
   MODEL_UNAVAILABLE: "The selected model is no longer available on this device.",
   MODEL_INVALID_WEIGHTS:
     "This file is not a text-generation model (it may be a vision projector). Delete it and re-download from the Models tab.",
   INFERENCE_FAILED: "Sorry, something went wrong generating a response.",
-  INFERENCE_OOM: "The model ran out of memory. Try a smaller model or close other apps.",
-  INFERENCE_CONTEXT_LIMIT: "The conversation exceeded the model context window. Start a new chat.",
   INFERENCE_ERROR_TITLE: "Generation Failed",
-  RESPONSE_TRUNCATED: "(Response shortened — generation limit reached.)",
-  CONTINUE_RESPONSE: "Continue",
-  CONTINUE_RESPONSE_ACCESSIBILITY: "Continue generating response",
-  CONTINUE_RESPONSE_FAILED: "Could not continue this response. Please try again.",
+  MODEL_INIT_FAILED: "Could not load the selected model. Please try again.",
+  SEARCHING_WEB: "Searching the web...",
 } as const;
-
-export const MAX_COMPLETION_TOKENS = 4096;
 
 export const CONTEXT_WINDOW_TOKENS_ANDROID = 4096;
 export const CONTEXT_WINDOW_TOKENS_IOS = 8192;
-
-/** Reserved headroom so prompt + completion never exceeds n_ctx. */
-export const GENERATION_TOKEN_BUFFER = 128;
-
-export const MIN_COMPLETION_TOKENS = 256;
-
-export const CONTINUE_USER_PROMPT =
-  "Continue your previous response exactly where you stopped. Do not repeat earlier text. Finish the final sentence.";
-
-export const DEFAULT_SYSTEM_PROMPT =
-  "You are a helpful assistant in a mobile chat app. Reply with only your final answer to the user. Do not output internal reasoning, thought channels, analysis steps, or markup tags such as channel or think blocks. Provide concise, complete answers. If a response is likely to be long, prioritize finishing the final sentence before the token limit is reached.";
 
 export const CONVERSATION_PREVIEW_MAX_LENGTH = 120;

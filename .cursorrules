@@ -166,3 +166,24 @@ UI components, spacing, and styling **must** maintain visual consistency and ope
 3. Prefer the existing theme tokens, constants, hooks, and DB abstractions.
 4. Optimize for correctness on both iOS and Android before aesthetic polish.
 5. Keep components thin; push I/O and business logic into hooks/services/DB.
+
+
+
+---
+
+## Local AI, Tools & Code Generation Rules
+
+### On-Device AI & Tool Calling
+- **LLM-Driven Tool Calling:** Never use regex, keyword matching, or string heuristics (e.g. `if (prompt.includes(...))`) to route tool calls or detect user intent. Tool execution decisions MUST be driven strictly by the LLM's structured output / Jinja schema boundaries.
+- **Engine Separation:** 
+  - Use `llama.rn` EXCLUSIVELY for GGUF text generation and chat streaming.
+  - Use `react-native-executorch` for background tasks (embeddings, STT/TTS, vision). Do not attempt to run GGUF models through ExecuTorch.
+- **Vector Search & Persistence:** Store vector embeddings inside `op-sqlite` using `sqlite-vec` virtual tables linked via `message_id`. Never run vector generation or distance queries on the main JS thread.
+- **Token Streaming:** Stream incoming tokens directly into localized UI refs or optimized state setters. Do not trigger full screen re-renders or deep object cloning on every individual token emitted by `llama.rn`.
+
+
+### Code Generation & Refinement
+- **Comment Discipline:** Only write comments/JSDoc for functions performing major tasks (functions that are at least 4–5 lines of code or contain non-obvious business logic). Do NOT add comments for simple, short, or self-explanatory functions.
+- **Avoid Heavy Regex:** Do not use complex or heavy regular expressions for parsing or validation. Prefer typed schemas, standard string methods, or structured data transformations.
+- **Maximum Efficiency & Conciseness:** Write highly optimized, concise, and production-ready code. Eliminate unnecessary intermediate variables, redundant abstraction layers, or boilerplate.
+- **Minimal File Creation:** Keep the project structure lean. Prefer extending existing services, hooks, or utility files over creating new single-use micro-files unless strictly required by architectural boundaries.

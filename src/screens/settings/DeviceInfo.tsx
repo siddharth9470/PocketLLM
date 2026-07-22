@@ -1,7 +1,7 @@
 import { ANDROID_DATABASE_PATH, IOS_LIBRARY_PATH } from "@op-engineering/op-sqlite";
 import * as Device from "expo-device";
 import * as FileSystem from "expo-file-system/legacy";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
   getDeviceName,
@@ -16,8 +16,9 @@ import {
   supportedAbis,
 } from "react-native-device-info";
 
-import { colors, radii, spacing, typography } from "@/constants/theme";
+import { radii, spacing, type ThemeColors, typography } from "@/constants/theme";
 import type { SettingsStackScreenProps } from "@/navigation/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 type InfoRow = { label: string; value: string; detail?: string };
 type InfoSection = { title: string; rows: InfoRow[] };
@@ -81,7 +82,10 @@ async function getAndroidCpuCores(): Promise<number | null> {
     const present = await FileSystem.readAsStringAsync("/sys/devices/system/cpu/present");
     const range = present.trim().match(/(\d+)-(\d+)/);
     if (range) return Number.parseInt(range[2], 10) - Number.parseInt(range[1], 10) + 1;
-    const ids = present.split(",").map((v) => v.trim()).filter(Boolean);
+    const ids = present
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
     return ids.length > 0 ? ids.length : null;
   } catch {
     return null;
@@ -184,9 +188,7 @@ async function loadDeviceInfo(): Promise<InfoSection[]> {
         },
         {
           label: "CPU architectures",
-          value: Device.supportedCpuArchitectures?.length
-            ? Device.supportedCpuArchitectures.join(", ")
-            : UNAVAILABLE,
+          value: Device.supportedCpuArchitectures?.length ? Device.supportedCpuArchitectures.join(", ") : UNAVAILABLE,
         },
         { label: "Supported ABIs", value: abis.length ? abis.join(", ") : UNAVAILABLE },
         ...(Platform.OS === "android" ? [{ label: "Hardware platform", value: textOrUnavailable(hardware) }] : []),
@@ -215,7 +217,7 @@ async function loadDeviceInfo(): Promise<InfoSection[]> {
   return sections;
 }
 
-function SectionCard({ section }: { section: InfoSection }) {
+function SectionCard({ section, styles }: { section: InfoSection; styles: DeviceInfoStyles }) {
   return (
     <View style={styles.card}>
       <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -231,6 +233,8 @@ function SectionCard({ section }: { section: InfoSection }) {
 }
 
 export default function DeviceInfoScreen(_props: SettingsStackScreenProps<"DeviceInfo">) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [sections, setSections] = useState<InfoSection[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -272,21 +276,26 @@ export default function DeviceInfoScreen(_props: SettingsStackScreenProps<"Devic
         </View>
       ) : null}
 
-      {sections?.map((section) => <SectionCard key={section.title} section={section} />)}
+      {sections?.map((section) => (
+        <SectionCard key={section.title} section={section} styles={styles} />
+      ))}
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
-  card: { backgroundColor: colors.surface, borderRadius: radii.md, padding: spacing.lg, gap: spacing.md },
-  sectionTitle: { ...typography.headline, color: colors.text },
-  row: { gap: spacing.xs },
-  rowLabel: { ...typography.caption, color: colors.textSecondary },
-  rowValue: { ...typography.body, color: colors.text },
-  rowDetail: { ...typography.caption, color: colors.textTertiary },
-  centered: { alignItems: "center", gap: spacing.md, paddingVertical: spacing.xl },
-  muted: { ...typography.caption, color: colors.textSecondary },
-  error: { ...typography.body, color: colors.danger, textAlign: "center" },
-});
+type DeviceInfoStyles = ReturnType<typeof createStyles>;
+
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
+    card: { backgroundColor: colors.surface, borderRadius: radii.md, padding: spacing.lg, gap: spacing.md },
+    sectionTitle: { ...typography.headline, color: colors.text },
+    row: { gap: spacing.xs },
+    rowLabel: { ...typography.caption, color: colors.textSecondary },
+    rowValue: { ...typography.body, color: colors.text },
+    rowDetail: { ...typography.caption, color: colors.textTertiary },
+    centered: { alignItems: "center", gap: spacing.md, paddingVertical: spacing.xl },
+    muted: { ...typography.caption, color: colors.textSecondary },
+    error: { ...typography.body, color: colors.danger, textAlign: "center" },
+  });

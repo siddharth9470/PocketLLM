@@ -1,3 +1,4 @@
+import * as FileSystem from "expo-file-system/legacy";
 import {
   createContext,
   createElement,
@@ -16,27 +17,19 @@ import {
   createConversation,
   createMessage,
   deleteConversation,
+  getAttachmentStoragePathsByConversationId,
   getConversationById,
   getConversations,
-  getMessagesByConversationId,
   updateConversation,
-  updateMessage,
 } from "@/db/ChatDB";
-import {
-  buildChatContextFromHistory,
-  classifyInferenceError,
-  resolveDownloadedModelPath,
-  runContinueInference,
-  runInference,
-} from "@/services/chatHelper";
+import { chatCompletion, initializeModel, resolveDownloadedModelPath } from "@/services/chatHelper";
 import type { ChatMessage, Conversation } from "@/types/chat";
 import { deriveConversationTitle, generateChatId } from "@/utils/chatIds";
 import { buildConversationPreview } from "@/utils/conversationPreview";
-import { stripReasoningTags } from "@/utils/reasoningFilter";
 
 interface SendMessageOptions {
   modelId: string;
-  onInferenceError?: (message: string) => void;
+  onSendError?: (message: string) => void;
 }
 
 interface ChatStore {
@@ -51,11 +44,8 @@ interface ChatStore {
   setActiveConversationId: (conversationId: string | null) => void;
   setConversationModel: (conversationId: string, modelId: string) => Promise<void>;
   deleteConversation: (conversationId: string) => Promise<void>;
-  continueAssistantMessage: (conversationId: string, messageId: string, options: SendMessageOptions) => Promise<void>;
   sendMessage: (conversationId: string, content: string, options: SendMessageOptions) => Promise<void>;
 }
-
-const STREAMING_UI_INTERVAL_MS = 48;
 
 const ChatStoreContext = createContext<ChatStore | undefined>(undefined);
 
@@ -70,41 +60,83 @@ function buildUserMessage(conversationId: string, content: string): ChatMessage 
   };
 }
 
-function buildAssistantMessage(
-  conversationId: string,
-  content: string,
-  status: ChatMessage["status"],
-  metrics?: ChatMessage["metrics"],
-  error?: string,
-  id?: string,
-  truncated?: boolean,
-): ChatMessage {
+function buildAssistantMessage(conversationId: string, content: string, id?: string): ChatMessage {
   return {
     id: id ?? generateChatId(),
     conversationId,
     role: "assistant",
     content,
-    status,
+    status: "completed",
     createdAt: new Date().toISOString(),
-    ...(truncated ? { truncated: true } : {}),
-    ...(metrics ? { metrics } : {}),
-    ...(error ? { error } : {}),
   };
 }
 
-function mergeAssistantContinuation(baseText: string, continuationText: string): string {
-  const base = stripReasoningTags(baseText).trimEnd();
-  const extra = stripReasoningTags(continuationText).trim();
+function buildStreamingAssistantMessage(conversationId: string, id: string): ChatMessage {
+  return {
+    id,
+    conversationId,
+    role: "assistant",
+    content: "",
+    status: "streaming",
+    createdAt: new Date().toISOString(),
+  };
+}
 
-  if (!extra) {
-    return base;
+function replaceAssistantMessage(
+  messages: ChatMessage[],
+  assistantMessageId: string,
+  nextMessage: ChatMessage,
+): ChatMessage[] {
+  const hasAssistantMessage = messages.some((message) => message.id === assistantMessageId);
+
+  if (hasAssistantMessage) {
+    return messages.map((message) => (message.id === assistantMessageId ? nextMessage : message));
   }
 
-  if (extra.startsWith(base)) {
-    return extra;
+  return [...messages, nextMessage];
+}
+
+function updateStreamingAssistantContent(
+  conversationDetails: Record<string, Conversation>,
+  conversationId: string,
+  assistantMessageId: string,
+  content: string,
+): Record<string, Conversation> {
+  const current = conversationDetails[conversationId];
+  if (!current) {
+    return conversationDetails;
   }
 
-  return `${base}${base.length > 0 ? " " : ""}${extra}`.trim();
+  const messages = current.messages ?? [];
+
+  return {
+    ...conversationDetails,
+    [conversationId]: {
+      ...current,
+      messages: messages.map((message) =>
+        message.id === assistantMessageId ? { ...message, content, status: "streaming" } : message,
+      ),
+    },
+  };
+}
+
+function removeAssistantMessageFromConversation(
+  conversationDetails: Record<string, Conversation>,
+  conversationId: string,
+  assistantMessageId: string,
+): Record<string, Conversation> {
+  const current = conversationDetails[conversationId];
+  if (!current) {
+    return conversationDetails;
+  }
+
+  return {
+    ...conversationDetails,
+    [conversationId]: {
+      ...current,
+      messages: (current.messages ?? []).filter((message) => message.id !== assistantMessageId),
+    },
+  };
 }
 
 function buildNewChatPlaceholder(conversationId: string): Conversation {
@@ -120,6 +152,19 @@ function buildNewChatPlaceholder(conversationId: string): Conversation {
   };
 }
 
+async function deleteStoredAttachmentFiles(paths: string[]): Promise<void> {
+  await Promise.all(
+    paths.map(async (storagePath) => {
+      try {
+        const uri = storagePath.startsWith("file://") ? storagePath : `file://${storagePath}`;
+        await FileSystem.deleteAsync(uri, { idempotent: true });
+      } catch (error) {
+        console.warn(`Failed to delete attachment at ${storagePath}:`, error);
+      }
+    }),
+  );
+}
+
 export function ChatStoreProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationDetails, setConversationDetails] = useState<Record<string, Conversation>>({});
@@ -127,6 +172,8 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
   const [isSending, setIsSending] = useState(false);
 
   const focusedConversationIdRef = useRef<string | null>(null);
+  const conversationDetailsRef = useRef<Record<string, Conversation>>({});
+  conversationDetailsRef.current = conversationDetails;
 
   const isConversationFocused = useCallback((conversationId: string): boolean => {
     return focusedConversationIdRef.current === conversationId;
@@ -250,36 +297,51 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
   const sendMessage = useCallback(
     async (conversationId: string, content: string, options: SendMessageOptions) => {
-      const trimmed = content.trim();
-      if (!trimmed) {
+      const messageText = content.trim();
+
+      if (!messageText) {
         return;
       }
 
-      const modelPath = await resolveDownloadedModelPath(options.modelId);
-      if (!modelPath) {
-        options.onInferenceError?.(ChatScreenLabels.MODEL_UNAVAILABLE);
-        return;
-      }
+      const now = new Date().toISOString();
+      const userMessage = buildUserMessage(conversationId, messageText);
+
+      const assistantMessageId = generateChatId();
+      const streamingAssistantMessage = buildStreamingAssistantMessage(conversationId, assistantMessageId);
 
       setIsSending(true);
 
+      if (isConversationFocused(conversationId)) {
+        setConversationDetails((prev) => {
+          const current = prev[conversationId] ?? buildNewChatPlaceholder(conversationId);
+
+          return {
+            ...prev,
+            [conversationId]: {
+              ...current,
+              modelId: options.modelId,
+              preview: messageText,
+              updatedAt: now,
+              messages: [...(current.messages ?? []), userMessage, streamingAssistantMessage],
+            },
+          };
+        });
+      }
+
       try {
-        const now = new Date().toISOString();
         const exists = await conversationExists(conversationId);
 
         if (!exists) {
-          const title = deriveConversationTitle(trimmed);
-          const newConversation: Conversation = {
+          const title = deriveConversationTitle(messageText);
+          await createConversation({
             id: conversationId,
             title,
-            preview: trimmed,
+            preview: messageText,
             modelId: options.modelId,
             createdAt: now,
             updatedAt: now,
             messages: [],
-          };
-
-          await createConversation(newConversation);
+          });
         } else {
           await updateConversation(conversationId, {
             modelId: options.modelId,
@@ -287,134 +349,80 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        const userMessage = buildUserMessage(conversationId, trimmed);
         await createMessage(userMessage);
-        await updateConversation(conversationId, { preview: trimmed, updatedAt: now });
+        await updateConversation(conversationId, { preview: messageText, updatedAt: now });
+      } catch (error) {
+        console.error("Failed to persist user message:", error);
+        options.onSendError?.(ChatScreenLabels.INFERENCE_FAILED);
+        setIsSending(false);
+        return;
+      }
 
-        if (isConversationFocused(conversationId)) {
-          setConversationDetails((prev) => {
-            const current = prev[conversationId];
-            if (!current) {
-              return prev;
-            }
-
-            return {
-              ...prev,
-              [conversationId]: {
-                ...current,
-                modelId: options.modelId,
-                preview: trimmed,
-                updatedAt: now,
-                messages: [...(current.messages ?? []), userMessage],
-              },
-            };
-          });
+      const removeStreamingAssistantFromUi = (): void => {
+        if (!isConversationFocused(conversationId)) {
+          return;
         }
 
-        const history = await getMessagesByConversationId(conversationId);
-        const contextMessages = buildChatContextFromHistory(history);
-
-        const assistantMessageId = generateChatId();
-        const assistantCreatedAt = new Date().toISOString();
-
-        const appendStreamingPlaceholder = (content: string): void => {
-          if (!isConversationFocused(conversationId)) {
-            return;
-          }
-
-          setConversationDetails((prev) => {
-            const current = prev[conversationId];
-            if (!current) {
-              return prev;
-            }
-
-            const messages = current.messages ?? [];
-            const existingIndex = messages.findIndex((message) => message.id === assistantMessageId);
-
-            if (existingIndex === -1) {
-              const streamingMessage: ChatMessage = {
-                id: assistantMessageId,
-                conversationId,
-                role: "assistant",
-                content,
-                status: "streaming",
-                createdAt: assistantCreatedAt,
-              };
-
-              return {
-                ...prev,
-                [conversationId]: {
-                  ...current,
-                  messages: [...messages, streamingMessage],
-                },
-              };
-            }
-
-            const updatedMessages = [...messages];
-            updatedMessages[existingIndex] = {
-              ...updatedMessages[existingIndex],
-              content,
-              status: "streaming",
-            };
-
-            return {
-              ...prev,
-              [conversationId]: {
-                ...current,
-                messages: updatedMessages,
-              },
-            };
-          });
-        };
-
-        let lastStreamUiFlushAt = 0;
-
-        const onToken = (displayText: string): void => {
-          const now = Date.now();
-          if (now - lastStreamUiFlushAt < STREAMING_UI_INTERVAL_MS) {
-            return;
-          }
-
-          lastStreamUiFlushAt = now;
-          appendStreamingPlaceholder(displayText);
-        };
-
-        let assistantContent: string = ChatScreenLabels.INFERENCE_FAILED;
-        let assistantStatus: ChatMessage["status"] = "completed";
-        let assistantError: string | undefined;
-        let assistantMetrics: ChatMessage["metrics"] | undefined;
-        let assistantTruncated = false;
-
-        try {
-          const completion = await runInference(modelPath, contextMessages, onToken);
-          assistantContent = completion.text.trim() || ChatScreenLabels.INFERENCE_FAILED;
-          assistantMetrics = completion.metrics;
-          assistantTruncated = completion.truncated === true;
-          appendStreamingPlaceholder(assistantContent);
-        } catch (error) {
-          const classified = classifyInferenceError(error);
-          assistantStatus = "error";
-          assistantError = classified.logMessage;
-          assistantContent = classified.userMessage;
-          console.error("Assistant inference failed:", error);
-          options.onInferenceError?.(classified.userMessage);
-        }
-
-        const assistantMessage = buildAssistantMessage(
-          conversationId,
-          assistantContent,
-          assistantStatus,
-          assistantMetrics,
-          assistantError,
-          assistantMessageId,
-          assistantTruncated,
+        setConversationDetails((prev) =>
+          removeAssistantMessageFromConversation(prev, conversationId, assistantMessageId),
         );
+      };
+
+      try {
+        const modelPath = await resolveDownloadedModelPath(options.modelId);
+        if (!modelPath) {
+          throw new Error(ChatScreenLabels.MODEL_UNAVAILABLE);
+        }
+
+        await initializeModel(modelPath);
+      } catch (error) {
+        console.error("Failed to load model for inference:", error);
+        options.onSendError?.(error instanceof Error ? error.message : ChatScreenLabels.MODEL_INIT_FAILED);
+        removeStreamingAssistantFromUi();
+        setIsSending(false);
+        return;
+      }
+
+      try {
+        const completionResult = await chatCompletion(
+          messageText,
+          (accumulatedText) => {
+            if (!isConversationFocused(conversationId)) {
+              return;
+            }
+
+            setConversationDetails((prev) =>
+              updateStreamingAssistantContent(prev, conversationId, assistantMessageId, accumulatedText),
+            );
+          },
+          {
+            onSearching: () => {
+              if (!isConversationFocused(conversationId)) {
+                return;
+              }
+
+              setConversationDetails((prev) =>
+                updateStreamingAssistantContent(
+                  prev,
+                  conversationId,
+                  assistantMessageId,
+                  ChatScreenLabels.SEARCHING_WEB,
+                ),
+              );
+            },
+          },
+        );
+
+        const assistantMessage: ChatMessage = {
+          ...buildAssistantMessage(conversationId, completionResult.text, assistantMessageId),
+          metrics: completionResult.metrics,
+        };
 
         await createMessage(assistantMessage);
 
         const responseTimestamp = new Date().toISOString();
         await updateConversation(conversationId, {
-          preview: buildConversationPreview(assistantContent),
+          preview: buildConversationPreview(completionResult.text),
           updatedAt: responseTimestamp,
         });
 
@@ -425,190 +433,24 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
               return prev;
             }
 
-            const messages = current.messages ?? [];
-            const existingIndex = messages.findIndex((message) => message.id === assistantMessageId);
-
-            if (existingIndex === -1) {
-              return {
-                ...prev,
-                [conversationId]: {
-                  ...current,
-                  preview: buildConversationPreview(assistantContent),
-                  updatedAt: responseTimestamp,
-                  messages: [...messages, assistantMessage],
-                },
-              };
-            }
-
-            const updatedMessages = [...messages];
-            updatedMessages[existingIndex] = assistantMessage;
-
             return {
               ...prev,
               [conversationId]: {
                 ...current,
-                preview: buildConversationPreview(assistantContent),
+                preview: buildConversationPreview(completionResult.text),
                 updatedAt: responseTimestamp,
-                messages: updatedMessages,
+                messages: replaceAssistantMessage(current.messages ?? [], assistantMessageId, assistantMessage),
               },
             };
           });
         }
 
-        await refreshConversations();
+        void refreshConversations();
       } catch (error) {
-        console.error("Failed to send message:", error);
-        options.onInferenceError?.(ChatScreenLabels.INFERENCE_FAILED);
-      } finally {
-        setIsSending(false);
-      }
-    },
-    [isConversationFocused, refreshConversations],
-  );
+        console.error("Failed to generate assistant message:", error);
+        options.onSendError?.(ChatScreenLabels.INFERENCE_FAILED);
 
-  const continueAssistantMessage = useCallback(
-    async (conversationId: string, messageId: string, options: SendMessageOptions) => {
-      const modelPath = await resolveDownloadedModelPath(options.modelId);
-      if (!modelPath) {
-        options.onInferenceError?.(ChatScreenLabels.MODEL_UNAVAILABLE);
-        return;
-      }
-
-      setIsSending(true);
-
-      try {
-        const history = await getMessagesByConversationId(conversationId);
-        const existingMessage = history.find((message) => message.id === messageId);
-
-        if (!existingMessage || existingMessage.role !== "assistant") {
-          options.onInferenceError?.(ChatScreenLabels.CONTINUE_RESPONSE_FAILED);
-          return;
-        }
-
-        const appendStreamingUpdate = (content: string, status: ChatMessage["status"] = "streaming"): void => {
-          if (!isConversationFocused(conversationId)) {
-            return;
-          }
-
-          setConversationDetails((prev) => {
-            const current = prev[conversationId];
-            if (!current) {
-              return prev;
-            }
-
-            const messages = current.messages ?? [];
-            const existingIndex = messages.findIndex((message) => message.id === messageId);
-            if (existingIndex === -1) {
-              return prev;
-            }
-
-            const updatedMessages = [...messages];
-            updatedMessages[existingIndex] = {
-              ...updatedMessages[existingIndex],
-              content,
-              status,
-              truncated: status === "streaming" ? true : updatedMessages[existingIndex].truncated,
-            };
-
-            return {
-              ...prev,
-              [conversationId]: {
-                ...current,
-                messages: updatedMessages,
-              },
-            };
-          });
-        };
-
-        let lastStreamUiFlushAt = 0;
-        const onToken = (displayText: string): void => {
-          const now = Date.now();
-          if (now - lastStreamUiFlushAt < STREAMING_UI_INTERVAL_MS) {
-            return;
-          }
-
-          lastStreamUiFlushAt = now;
-          appendStreamingUpdate(mergeAssistantContinuation(existingMessage.content, displayText));
-        };
-
-        appendStreamingUpdate(existingMessage.content, "streaming");
-
-        let mergedContent = existingMessage.content;
-        let mergedMetrics = existingMessage.metrics;
-        let stillTruncated = false;
-
-        try {
-          const completion = await runContinueInference(
-            modelPath,
-            history,
-            messageId,
-            existingMessage.content,
-            onToken,
-          );
-
-          mergedContent = mergeAssistantContinuation(existingMessage.content, completion.text);
-          mergedMetrics = completion.metrics ?? mergedMetrics;
-          stillTruncated = completion.truncated === true;
-        } catch (error) {
-          const classified = classifyInferenceError(error);
-          console.error("Assistant continuation failed:", error);
-          options.onInferenceError?.(classified.userMessage);
-          return;
-        }
-
-        const updatedMessage: ChatMessage = {
-          ...existingMessage,
-          content: mergedContent,
-          status: "completed",
-          truncated: stillTruncated,
-          metrics: mergedMetrics,
-        };
-
-        await updateMessage(messageId, {
-          content: mergedContent,
-          status: "completed",
-          truncated: stillTruncated,
-          metrics: mergedMetrics,
-        });
-
-        const responseTimestamp = new Date().toISOString();
-        await updateConversation(conversationId, {
-          preview: buildConversationPreview(mergedContent),
-          updatedAt: responseTimestamp,
-        });
-
-        if (isConversationFocused(conversationId)) {
-          setConversationDetails((prev) => {
-            const current = prev[conversationId];
-            if (!current) {
-              return prev;
-            }
-
-            const messages = current.messages ?? [];
-            const existingIndex = messages.findIndex((message) => message.id === messageId);
-            if (existingIndex === -1) {
-              return prev;
-            }
-
-            const updatedMessages = [...messages];
-            updatedMessages[existingIndex] = updatedMessage;
-
-            return {
-              ...prev,
-              [conversationId]: {
-                ...current,
-                preview: buildConversationPreview(mergedContent),
-                updatedAt: responseTimestamp,
-                messages: updatedMessages,
-              },
-            };
-          });
-        }
-
-        await refreshConversations();
-      } catch (error) {
-        console.error("Failed to continue assistant message:", error);
-        options.onInferenceError?.(ChatScreenLabels.CONTINUE_RESPONSE_FAILED);
+        removeStreamingAssistantFromUi();
       } finally {
         setIsSending(false);
       }
@@ -617,7 +459,12 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
   );
 
   const deleteConversationById = useCallback(async (conversationId: string): Promise<void> => {
+    const attachmentPaths = await getAttachmentStoragePathsByConversationId(conversationId);
     await deleteConversation(conversationId);
+
+    if (attachmentPaths.length > 0) {
+      await deleteStoredAttachmentFiles(attachmentPaths);
+    }
 
     setConversations((prev) => prev.filter((conversation) => conversation.id !== conversationId));
     setConversationDetails((prev) => {
@@ -643,7 +490,6 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       setActiveConversationId,
       setConversationModel,
       deleteConversation: deleteConversationById,
-      continueAssistantMessage,
       sendMessage,
     }),
     [
@@ -657,7 +503,6 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       setActiveConversationId,
       setConversationModel,
       deleteConversationById,
-      continueAssistantMessage,
       sendMessage,
     ],
   );

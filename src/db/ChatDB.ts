@@ -1,7 +1,52 @@
 import { ANDROID_DATABASE_PATH, type DB, IOS_LIBRARY_PATH, open } from "@op-engineering/op-sqlite";
 import { Platform } from "react-native";
 
-import type { ChatMessage, Conversation } from "@/types/chat";
+import type { ChatMessage, ChatMessageAttachment, Conversation } from "@/types/chat";
+
+interface MessageAttachmentRow {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  kind: string;
+  storage_path: string;
+  mime_type: string;
+  original_file_name: string | null;
+  file_size_bytes: number | null;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  sort_order: number;
+  created_at: string;
+}
+
+function rowToAttachment(row: MessageAttachmentRow): ChatMessageAttachment {
+  const attachment: ChatMessageAttachment = {
+    id: row.id,
+    messageId: row.message_id,
+    conversationId: row.conversation_id,
+    kind: row.kind as ChatMessageAttachment["kind"],
+    storagePath: row.storage_path,
+    mimeType: row.mime_type,
+    fileSizeBytes: row.file_size_bytes ?? 0,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+  };
+
+  if (row.original_file_name) {
+    attachment.originalFileName = row.original_file_name;
+  }
+  if (row.width != null) {
+    attachment.width = row.width;
+  }
+  if (row.height != null) {
+    attachment.height = row.height;
+  }
+  if (row.duration_ms != null) {
+    attachment.durationMs = row.duration_ms;
+  }
+
+  return attachment;
+}
 
 interface ConversationRow {
   id: string;
@@ -140,6 +185,34 @@ class ChatDatabaseManager {
         "CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_id ON chat_messages(conversation_id);",
       );
 
+      this.db.execute(
+        `CREATE TABLE IF NOT EXISTS message_attachments (
+          id TEXT PRIMARY KEY NOT NULL,
+          message_id TEXT NOT NULL,
+          conversation_id TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          storage_path TEXT NOT NULL,
+          mime_type TEXT NOT NULL,
+          original_file_name TEXT,
+          file_size_bytes INTEGER,
+          width INTEGER,
+          height INTEGER,
+          duration_ms INTEGER,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+          FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+        );`,
+      );
+
+      this.db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id ON message_attachments(message_id);",
+      );
+
+      this.db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_message_attachments_conversation_id ON message_attachments(conversation_id);",
+      );
+
       try {
         this.db.execute("ALTER TABLE chat_messages ADD COLUMN truncated INTEGER NOT NULL DEFAULT 0;");
       } catch {
@@ -252,6 +325,101 @@ class ChatDatabaseManager {
     };
   }
 
+  /** Persists one or more attachment rows linked to a chat message. */
+  public async createMessageAttachments(attachments: ChatMessageAttachment[]): Promise<void> {
+    if (attachments.length === 0) {
+      return;
+    }
+
+    const connection = this.getDatabaseConnection();
+
+    for (const attachment of attachments) {
+      await connection.execute(
+        `INSERT INTO message_attachments (
+          id,
+          message_id,
+          conversation_id,
+          kind,
+          storage_path,
+          mime_type,
+          original_file_name,
+          file_size_bytes,
+          width,
+          height,
+          duration_ms,
+          sort_order,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        [
+          attachment.id,
+          attachment.messageId,
+          attachment.conversationId,
+          attachment.kind,
+          attachment.storagePath,
+          attachment.mimeType,
+          attachment.originalFileName ?? null,
+          attachment.fileSizeBytes,
+          attachment.width ?? null,
+          attachment.height ?? null,
+          attachment.durationMs ?? null,
+          attachment.sortOrder,
+          attachment.createdAt,
+        ],
+      );
+    }
+  }
+
+  /** Loads attachment rows for a batch of message ids and groups them by message. */
+  private async getAttachmentsGroupedByMessageId(
+    messageIds: string[],
+  ): Promise<Record<string, ChatMessageAttachment[]>> {
+    if (messageIds.length === 0) {
+      return {};
+    }
+
+    const connection = this.getDatabaseConnection();
+    const placeholders = messageIds.map(() => "?").join(", ");
+    const result = await connection.execute(
+      `SELECT * FROM message_attachments WHERE message_id IN (${placeholders}) ORDER BY sort_order ASC, created_at ASC;`,
+      messageIds,
+    );
+
+    const grouped: Record<string, ChatMessageAttachment[]> = {};
+
+    for (const row of result.rows) {
+      const attachment = rowToAttachment(row as unknown as MessageAttachmentRow);
+      const bucket = grouped[attachment.messageId] ?? [];
+      bucket.push(attachment);
+      grouped[attachment.messageId] = bucket;
+    }
+
+    return grouped;
+  }
+
+  /** Hydrates chat messages with their normalized attachment rows. */
+  private async hydrateMessagesWithAttachments(messages: ChatMessage[]): Promise<ChatMessage[]> {
+    const messageIds = messages.map((message) => message.id);
+    const grouped = await this.getAttachmentsGroupedByMessageId(messageIds);
+
+    return messages.map((message) => {
+      const attachments = grouped[message.id];
+      if (!attachments || attachments.length === 0) {
+        return message;
+      }
+
+      return { ...message, attachments };
+    });
+  }
+
+  public async getAttachmentStoragePathsByConversationId(conversationId: string): Promise<string[]> {
+    const connection = this.getDatabaseConnection();
+    const result = await connection.execute("SELECT storage_path FROM message_attachments WHERE conversation_id = ?;", [
+      conversationId,
+    ]);
+
+    return result.rows.map((row) => String((row as { storage_path: string }).storage_path));
+  }
+
   public async createMessage(message: ChatMessage): Promise<void> {
     const connection = this.getDatabaseConnection();
 
@@ -341,7 +509,8 @@ class ChatDatabaseManager {
       [conversationId],
     );
 
-    return result.rows.map((row) => rowToMessage(row as unknown as ChatMessageRow));
+    const messages = result.rows.map((row) => rowToMessage(row as unknown as ChatMessageRow));
+    return this.hydrateMessagesWithAttachments(messages);
   }
 }
 
@@ -376,6 +545,14 @@ export async function getConversationById(conversationId: string): Promise<Conve
 
 export async function createMessage(message: ChatMessage): Promise<void> {
   return chatDb.createMessage(message);
+}
+
+export async function createMessageAttachments(attachments: ChatMessageAttachment[]): Promise<void> {
+  return chatDb.createMessageAttachments(attachments);
+}
+
+export async function getAttachmentStoragePathsByConversationId(conversationId: string): Promise<string[]> {
+  return chatDb.getAttachmentStoragePathsByConversationId(conversationId);
 }
 
 export async function updateMessage(

@@ -11,7 +11,7 @@ import { ChatScreenLabels } from "@/constants/chat";
 import { chatDb } from "@/db/ChatDB";
 import { getDownloadedModelsList } from "@/db/ModelDB";
 import ChatScreen from "@/screens/chats/ChatScreen";
-import { initializeModel, releaseModel, resolveDownloadedModelPath, runInference } from "@/services/chatHelper";
+import { chatCompletion, initializeModel, releaseModel, resolveDownloadedModelPath } from "@/services/chatHelper";
 import { ChatStoreProvider } from "@/stores/chatStore";
 
 jest.mock("@/stores/chatStore", () => {
@@ -28,20 +28,18 @@ jest.mock("@/services/chatHelper", () => ({
   initializeModel: jest.fn(),
   releaseModel: jest.fn(),
   resolveDownloadedModelPath: jest.fn(),
-  runInference: jest.fn(),
-  runContinueInference: jest.fn(),
-  buildChatContextFromHistory: jest.fn((messages: Array<{ role: string; content: string }>) =>
-    messages.map((message) => ({ role: message.role, content: message.content })),
-  ),
-  classifyInferenceError: jest.fn((error: unknown) => ({
-    userMessage: "Sorry, something went wrong generating a response.",
-    logMessage: String(error),
-  })),
+  chatCompletion: jest.fn(),
 }));
-jest.mock("@/utils/chatIds", () => ({
-  generateChatId: jest.fn(() => `chat-id-${Date.now()}`),
-  deriveConversationTitle: (prompt: string) => prompt.trim().slice(0, 50),
-}));
+jest.mock("@/utils/chatIds", () => {
+  let chatIdCounter = 0;
+  return {
+    generateChatId: jest.fn(() => {
+      chatIdCounter += 1;
+      return `chat-id-${chatIdCounter}`;
+    }),
+    deriveConversationTitle: (prompt: string) => prompt.trim().slice(0, 50),
+  };
+});
 jest.mock("@react-navigation/native", () => {
   const React = require("react");
   return {
@@ -110,6 +108,7 @@ jest.mock("react-native-gesture-handler", () => {
 
 const GIFTED_CHAT_SEND_TEST_ID = "GC_SEND_TOUCHABLE";
 const MOCK_MODEL = buildCompletedModel();
+const MOCK_MODEL_PATH = "/mock/path.gguf";
 const MOCK_USER_PROMPT = "What is on-device inference?";
 const MOCK_ASSISTANT_RESPONSE = "On-device inference runs the model locally on your phone.";
 
@@ -247,10 +246,9 @@ describe("ChatScreen", () => {
     mockExecute.mockResolvedValue({ rows: [], rowsAffected: 1 });
 
     jest.mocked(getDownloadedModelsList).mockResolvedValue([MOCK_MODEL]);
-    jest.mocked(resolveDownloadedModelPath).mockResolvedValue("/mock/path.gguf");
+    jest.mocked(resolveDownloadedModelPath).mockResolvedValue(MOCK_MODEL_PATH);
     jest.mocked(initializeModel).mockResolvedValue(undefined);
     jest.mocked(releaseModel).mockResolvedValue(undefined);
-    jest.mocked(runInference).mockResolvedValue({ text: MOCK_ASSISTANT_RESPONSE, truncated: false });
   });
 
   it("shows the model selector when no model is assigned", async () => {
@@ -299,13 +297,21 @@ describe("Messaging pipeline and database sync", () => {
     installTrackedSqlMock();
 
     jest.mocked(getDownloadedModelsList).mockResolvedValue([MOCK_MODEL]);
-    jest.mocked(resolveDownloadedModelPath).mockResolvedValue("/mock/path.gguf");
+    jest.mocked(resolveDownloadedModelPath).mockResolvedValue(MOCK_MODEL_PATH);
     jest.mocked(initializeModel).mockResolvedValue(undefined);
     jest.mocked(releaseModel).mockResolvedValue(undefined);
-    jest.mocked(runInference).mockResolvedValue({ text: MOCK_ASSISTANT_RESPONSE, truncated: false });
+    jest.mocked(chatCompletion).mockImplementation(async (_prompt, onToken) => {
+      onToken?.("On-device ");
+      onToken?.(MOCK_ASSISTANT_RESPONSE);
+      return { text: MOCK_ASSISTANT_RESPONSE };
+    });
   });
 
-  it("persists user and assistant messages after Gifted Chat send completes inference", async () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("persists user and assistant messages after chat completion", async () => {
     await mountChatScreenWithProvider(dbSyncRoute);
 
     if (screen.queryAllByText(ChatScreenLabels.MODEL_SELECT_TITLE).length > 0) {
@@ -314,14 +320,14 @@ describe("Messaging pipeline and database sync", () => {
 
     await typeAndSendMessage(MOCK_USER_PROMPT);
 
-    await waitFor(() => expect(runInference).toHaveBeenCalled());
+    await waitFor(() => {
+      const inserts = getChatMessageInserts();
+      const userInsert = inserts.find((params) => params[2] === "user");
+      const assistantInsert = inserts.find((params) => params[2] === "assistant");
 
-    const inserts = getChatMessageInserts();
-    const userInsert = inserts.find((params) => params[2] === "user");
-    const assistantInsert = inserts.find((params) => params[2] === "assistant");
-
-    expect(userInsert?.[3]).toBe(MOCK_USER_PROMPT);
-    expect(assistantInsert?.[3]).toBe(MOCK_ASSISTANT_RESPONSE);
-    expect(inserts.length).toBeGreaterThanOrEqual(2);
+      expect(userInsert?.[3]).toBe(MOCK_USER_PROMPT);
+      expect(assistantInsert?.[3]).toBe(MOCK_ASSISTANT_RESPONSE);
+      expect(inserts.length).toBeGreaterThanOrEqual(2);
+    });
   });
 });

@@ -1,7 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { colors } from "@/constants/theme";
+import { type BottomTabNavigationOptions, createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import type { RouteProp } from "@react-navigation/native";
+import { createNativeStackNavigator, type NativeStackNavigationOptions } from "@react-navigation/native-stack";
+import { useCallback, useMemo } from "react";
+
+import type { ThemeColors } from "@/constants/theme";
 import type {
   ChatsStackParamList,
   MainTabParamList,
@@ -17,6 +20,8 @@ import ModelDetailsScreen from "@/screens/models/ModelDetails";
 import ModelsScreen from "@/screens/models/ModelsScreen";
 import DeviceInfoScreen from "@/screens/settings/DeviceInfo";
 import SettingsScreen from "@/screens/settings/SettingsScreen";
+import { useTheme } from "@/theme/ThemeProvider";
+import { scaleFont } from "@/utils/scaling";
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -24,106 +29,106 @@ const ModelsStack = createNativeStackNavigator<ModelsStackParamList>();
 const ChatsStack = createNativeStackNavigator<ChatsStackParamList>();
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 
+const TAB_ICONS: Record<keyof MainTabParamList, keyof typeof Ionicons.glyphMap> = {
+  ModelsTab: "cube-outline",
+  ChatsTab: "chatbubbles-outline",
+  SettingsTab: "settings-outline",
+};
+
+/** Flat, themed header shared by every native stack. Blurred screens are frozen to avoid wasted renders. */
+function buildStackScreenOptions(colors: ThemeColors): NativeStackNavigationOptions {
+  return {
+    headerShadowVisible: false,
+    headerStyle: { backgroundColor: colors.surface },
+    headerTintColor: colors.text,
+    headerTitleStyle: { color: colors.text, fontSize: scaleFont(17), fontWeight: "600" },
+    contentStyle: { backgroundColor: colors.background },
+    freezeOnBlur: true,
+  };
+}
+
+function modelDetailsScreenOptions({
+  route,
+}: {
+  route: RouteProp<ModelsStackParamList, "ModelDetails">;
+}): NativeStackNavigationOptions {
+  return { title: route.params.model.author || "Model Details" };
+}
+
+function chatScreenOptions({ route }: { route: RouteProp<ChatsStackParamList, "Chat"> }): NativeStackNavigationOptions {
+  return { title: route.params.title };
+}
+
 export default function CentralNavigator() {
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
       <RootStack.Screen name="Initial" component={InitialScreen} />
-      <RootStack.Screen name="Main" component={MainTab} options={{ headerShown: false }} />
+      <RootStack.Screen name="Main" component={MainTabs} />
     </RootStack.Navigator>
   );
 }
 
-// --- Sub-navigators (kept below the main Root export for quick traceability) ---
+function MainTabs() {
+  const { colors } = useTheme();
 
-function MainTab() {
+  const screenOptions = useCallback(
+    ({ route }: { route: RouteProp<MainTabParamList, keyof MainTabParamList> }): BottomTabNavigationOptions => ({
+      headerShown: false,
+      freezeOnBlur: true,
+      tabBarActiveTintColor: colors.tabActive,
+      tabBarInactiveTintColor: colors.tabInactive,
+      tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+      tabBarIcon: ({ color, size }) => <Ionicons name={TAB_ICONS[route.name]} size={size} color={color} />,
+    }),
+    [colors],
+  );
+
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: colors.tabActive,
-        tabBarInactiveTintColor: colors.tabInactive,
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-        },
-        tabBarIcon: ({ color, size }) => {
-          const iconName = getTabIcon(route.name as keyof MainTabParamList);
-          return <Ionicons name={iconName} size={size} color={color} />;
-        },
-      })}
-    >
-      <Tab.Screen name="ModelsTab" component={ModelsStackNavigator} options={{ title: "Models" }} />
-      <Tab.Screen name="ChatsTab" component={ChatsStackNavigator} options={{ title: "Chats" }} />
-      <Tab.Screen name="SettingsTab" component={SettingsStackNavigator} options={{ title: "Settings" }} />
+    <Tab.Navigator screenOptions={screenOptions}>
+      <Tab.Screen name="ModelsTab" component={ModelsStackScreen} options={{ title: "Models" }} />
+      <Tab.Screen name="ChatsTab" component={ChatsStackScreen} options={{ title: "Chats" }} />
+      <Tab.Screen name="SettingsTab" component={SettingsStackScreen} options={{ title: "Settings" }} />
     </Tab.Navigator>
   );
 }
 
-function ModelsStackNavigator() {
+function ModelsStackScreen() {
+  const { colors } = useTheme();
+  const screenOptions = useMemo(() => buildStackScreenOptions(colors), [colors]);
+
   return (
-    <ModelsStack.Navigator
-      screenOptions={{
-        headerLargeTitle: false,
-        headerShadowVisible: false,
-        headerStyle: { backgroundColor: colors.background },
-        contentStyle: { backgroundColor: colors.background },
-      }}
-    >
+    <ModelsStack.Navigator screenOptions={screenOptions}>
       <ModelsStack.Screen name="Models" component={ModelsScreen} options={{ title: "Models" }} />
       <ModelsStack.Screen
         name="DownloadedModels"
         component={DownloadedModelsScreen}
         options={{ title: "Downloaded Models" }}
       />
-      <ModelsStack.Screen
-        name="ModelDetails"
-        component={ModelDetailsScreen}
-        options={({ route }) => ({ title: route.params.model.author || "Model Details" })}
-      />
+      <ModelsStack.Screen name="ModelDetails" component={ModelDetailsScreen} options={modelDetailsScreenOptions} />
     </ModelsStack.Navigator>
   );
 }
 
-function ChatsStackNavigator() {
+function ChatsStackScreen() {
+  const { colors } = useTheme();
+  const screenOptions = useMemo(() => buildStackScreenOptions(colors), [colors]);
+
   return (
-    <ChatsStack.Navigator
-      screenOptions={{
-        headerShadowVisible: false,
-        headerStyle: { backgroundColor: colors.background },
-        contentStyle: { backgroundColor: colors.background },
-      }}
-    >
-      <ChatsStack.Screen name="ChatList" component={ChatListScreen} />
-      <ChatsStack.Screen name="Chat" component={ChatScreen} options={({ route }) => ({ title: route.params.title })} />
+    <ChatsStack.Navigator screenOptions={screenOptions}>
+      <ChatsStack.Screen name="ChatList" component={ChatListScreen} options={{ title: "Chats" }} />
+      <ChatsStack.Screen name="Chat" component={ChatScreen} options={chatScreenOptions} />
     </ChatsStack.Navigator>
   );
 }
 
-function SettingsStackNavigator() {
+function SettingsStackScreen() {
+  const { colors } = useTheme();
+  const screenOptions = useMemo(() => buildStackScreenOptions(colors), [colors]);
+
   return (
-    <SettingsStack.Navigator
-      screenOptions={{
-        headerLargeTitle: true,
-        headerShadowVisible: false,
-        headerStyle: { backgroundColor: colors.background },
-        contentStyle: { backgroundColor: colors.background },
-      }}
-    >
+    <SettingsStack.Navigator screenOptions={screenOptions}>
       <SettingsStack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
       <SettingsStack.Screen name="DeviceInfo" component={DeviceInfoScreen} options={{ title: "Device Info" }} />
     </SettingsStack.Navigator>
   );
-}
-
-function getTabIcon(routeName: keyof MainTabParamList): keyof typeof Ionicons.glyphMap {
-  switch (routeName) {
-    case "ModelsTab":
-      return "cube-outline";
-    case "ChatsTab":
-      return "chatbubbles-outline";
-    case "SettingsTab":
-      return "settings-outline";
-    default:
-      return "ellipse-outline";
-  }
 }

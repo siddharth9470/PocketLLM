@@ -1,4 +1,7 @@
+/// <reference types="jest" />
+
 import type { UseQueryResult } from "@tanstack/react-query";
+import type { NativeCompletionResult } from "llama.rn";
 
 import { ChatScreenLabels } from "@/constants/chat";
 import type { Conversation } from "@/types/chat";
@@ -13,15 +16,14 @@ export type MockChatStore = {
   isLoadingConversations: boolean;
   conversationDetails: Record<string, Conversation>;
   isSending: boolean;
-  refreshConversations: jest.Mock;
-  loadConversation: jest.Mock;
-  getConversation: jest.Mock;
-  sendMessage: jest.Mock;
-  continueAssistantMessage: jest.Mock;
-  setConversationModel: jest.Mock;
-  setActiveConversationId: jest.Mock;
-  createConversationId: jest.Mock;
-  deleteConversation: jest.Mock;
+  refreshConversations: jest.MockedFunction<() => Promise<void>>;
+  loadConversation: jest.MockedFunction<(conversationId: string) => Promise<Conversation | null>>;
+  getConversation: jest.MockedFunction<(conversationId: string) => Conversation | undefined>;
+  sendMessage: jest.MockedFunction<(conversationId: string, content: string, options: unknown) => Promise<void>>;
+  setConversationModel: jest.MockedFunction<(conversationId: string, modelId: string) => Promise<void>>;
+  setActiveConversationId: jest.MockedFunction<(conversationId: string | null) => void>;
+  createConversationId: jest.MockedFunction<() => string>;
+  deleteConversation: jest.MockedFunction<(conversationId: string) => Promise<void>>;
 };
 
 export function mockChatStore(overrides: Partial<MockChatStore> = {}): MockChatStore {
@@ -36,7 +38,6 @@ export function mockChatStore(overrides: Partial<MockChatStore> = {}): MockChatS
     loadConversation: jest.fn().mockResolvedValue(null),
     getConversation: jest.fn(),
     sendMessage: jest.fn().mockResolvedValue(undefined),
-    continueAssistantMessage: jest.fn().mockResolvedValue(undefined),
     setConversationModel: jest.fn().mockResolvedValue(undefined),
     setActiveConversationId: jest.fn(),
     createConversationId: jest.fn(() => MOCK_NEW_CONVERSATION_ID),
@@ -127,6 +128,35 @@ export function buildHuggingFaceModelsQuery(
 }
 
 export const mockExecute = jest.fn().mockResolvedValue({ rows: [], rowsAffected: 1 });
+
+/**
+ * Builds a llama.rn `NativeCompletionResult` for inference tests.
+ *
+ * The native bridge shape declares many required fields the app never reads. We
+ * populate only the fields production code touches (`text`, `content`,
+ * `tool_calls`, `timings`) and isolate the single native-boundary cast here so
+ * individual tests stay concise.
+ */
+export function buildCompletionResult(overrides: Partial<NativeCompletionResult> = {}): NativeCompletionResult {
+  return {
+    text: "",
+    content: "",
+    reasoning_content: "",
+    tool_calls: [],
+    timings: {
+      cache_n: 0,
+      prompt_n: 12,
+      prompt_ms: 100,
+      prompt_per_token_ms: 0,
+      prompt_per_second: 0,
+      predicted_n: 24,
+      predicted_ms: 200,
+      predicted_per_token_ms: 0,
+      predicted_per_second: 42,
+    },
+    ...overrides,
+  } as NativeCompletionResult;
+}
 
 export const MOCK_HF_MODELS: HuggingFaceModel[] = [
   {

@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import { ActivityIndicator, Pressable, type StyleProp, StyleSheet, Text, type ViewStyle } from "react-native";
 
-import { colors, radii, spacing, typography } from "@/constants/theme";
+import { radii, spacing, type ThemeColors, typography } from "@/constants/theme";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface PrimaryButtonProps {
   label: string;
@@ -19,6 +21,8 @@ export default function PrimaryButton({
   variant = "primary",
   style,
 }: PrimaryButtonProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const isDisabled = disabled || loading;
 
   return (
@@ -34,7 +38,7 @@ export default function PrimaryButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "secondary" ? colors.primary : colors.surface} />
+        <ActivityIndicator color={variant === "secondary" ? colors.primary : colors.userBubbleText} />
       ) : (
         <Text style={[styles.label, variant === "secondary" && styles.secondaryLabel]}>{label}</Text>
       )}
@@ -42,36 +46,36 @@ export default function PrimaryButton({
   );
 }
 
-const styles = StyleSheet.create({
-  button: {
-    minHeight: 44,
-    borderRadius: radii.md,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  primary: {
-    backgroundColor: colors.primary,
-  },
-  secondary: {
-    backgroundColor: colors.chipBackground,
-  },
-  success: {
-    backgroundColor: "#34C759",
-  },
-  pressed: {
-    opacity: 0.85,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  label: {
-    ...typography.headline,
-    fontSize: 15,
-    color: colors.surface,
-  },
-  secondaryLabel: {
-    color: colors.primary,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    button: {
+      minHeight: 44,
+      borderRadius: radii.md,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+    },
+    primary: {
+      backgroundColor: colors.primary,
+    },
+    secondary: {
+      backgroundColor: colors.chipBackground,
+    },
+    success: {
+      backgroundColor: "#34C759",
+    },
+    pressed: {
+      opacity: 0.85,
+    },
+    disabled: {
+      opacity: 0.5,
+    },
+    label: {
+      ...typography.headline,
+      color: colors.userBubbleText,
+    },
+    secondaryLabel: {
+      color: colors.primary,
+    },
+  });

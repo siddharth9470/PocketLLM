@@ -9,8 +9,13 @@ type DownloadTask = ReturnType<typeof createDownloadTask>;
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { getDownloadedModels, getDownloadedModelsList, removeDownloadedModel, saveDownloadedModel } from "@/db/ModelDB";
-import { getDownloadUrlForModel, deleteLocalModelFile, localFileBasename, normalizeFileUri } from "@/services/downloadHelpers";
 import { releaseModelForPath } from "@/services/chatHelper";
+import {
+  deleteLocalModelFile,
+  getDownloadUrlForModel,
+  localFileBasename,
+  normalizeFileUri,
+} from "@/services/downloadHelpers";
 import type { HuggingFaceModel } from "@/types/models";
 
 interface DownloaderSnapshot {
@@ -84,54 +89,42 @@ function attachTaskListeners(task: DownloadTask, modelId: string, fallbackFileUr
     patchSnapshotKey("downloadProgress", (prev) => ({ ...prev, [modelId]: percentage }));
   });
 
-  task.done(
-    async ({
-      location,
-      bytesDownloaded,
-      bytesTotal,
-    }: {
-      location: string;
-      bytesDownloaded: number;
-      bytesTotal: number;
-    }) => {
-      const metadataFileUri = task.metadata.fileUri as string | undefined;
-      const fileUri = normalizeFileUri(
-        location || metadataFileUri || task.destination || fallbackFileUri || "",
-      );
+  task.done(async ({ location, bytesTotal }: { location: string; bytesTotal: number }) => {
+    const metadataFileUri = task.metadata.fileUri as string | undefined;
+    const fileUri = normalizeFileUri(location || metadataFileUri || task.destination || fallbackFileUri || "");
 
-      delete activeTasks[modelId];
-      clearActiveDownload(modelId, 100);
+    delete activeTasks[modelId];
+    clearActiveDownload(modelId, 100);
 
-      try {
-        const current = await getDownloadedModels();
-        const existingModel = current[modelId];
-        if (existingModel && fileUri) {
-          const fileSizeBytes = bytesTotal > 0 ? bytesTotal : existingModel.downloadInfo?.fileSizeBytes;
-          await saveDownloadedModel({
-            ...existingModel,
-            downloadInfo: {
-              ...(existingModel.downloadInfo ?? {}),
-              localFilePath: fileUri,
-              status: "completed",
-              downloadedAt: Date.now(),
-              fileSizeBytes,
-            },
-          });
-          markModelDownloaded(modelId);
-          const completedModel = (await getDownloadedModels())[modelId];
-          if (completedModel) {
-            patchSnapshotKey("completedDownloads", (prev) => ({ ...prev, [modelId]: completedModel }));
-          }
-        } else if (!fileUri) {
-          console.error(`Download complete for ${modelId}, but no file path was available to persist.`);
+    try {
+      const current = await getDownloadedModels();
+      const existingModel = current[modelId];
+      if (existingModel && fileUri) {
+        const fileSizeBytes = bytesTotal > 0 ? bytesTotal : existingModel.downloadInfo?.fileSizeBytes;
+        await saveDownloadedModel({
+          ...existingModel,
+          downloadInfo: {
+            ...(existingModel.downloadInfo ?? {}),
+            localFilePath: fileUri,
+            status: "completed",
+            downloadedAt: Date.now(),
+            fileSizeBytes,
+          },
+        });
+        markModelDownloaded(modelId);
+        const completedModel = (await getDownloadedModels())[modelId];
+        if (completedModel) {
+          patchSnapshotKey("completedDownloads", (prev) => ({ ...prev, [modelId]: completedModel }));
         }
-      } catch (err) {
-        console.error("Failed to save downloaded model metadata", err);
+      } else if (!fileUri) {
+        console.error(`Download complete for ${modelId}, but no file path was available to persist.`);
       }
+    } catch (err) {
+      console.error("Failed to save downloaded model metadata", err);
+    }
 
-      completeHandler(modelId);
-    },
-  );
+    completeHandler(modelId);
+  });
 
   task.error(({ error }: { error: unknown }) => {
     console.error(`Error downloading ${modelId}:`, error);

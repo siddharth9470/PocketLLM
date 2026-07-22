@@ -15,11 +15,12 @@ import {
 import ModelCard from "@/components/ModelCard";
 import ModelFilterSortSheet from "@/components/ModelFilterSortSheet";
 import { ModelsScreenLabels } from "@/constants/models";
-import { colors, radii, spacing, typography } from "@/constants/theme";
+import { radii, spacing, type ThemeColors, typography } from "@/constants/theme";
 import { useHuggingFaceModels } from "@/hooks/useHuggingFaceModels";
 import { useModelFilterSort } from "@/hooks/useModelFilterSort";
 import type { ModelsStackScreenProps } from "@/navigation/types";
 import { useModelDownloader } from "@/services/useModelDownloader";
+import { useTheme } from "@/theme/ThemeProvider";
 import type { HuggingFaceModel } from "@/types/models";
 import { parseModelId } from "@/utils/parseModelId";
 
@@ -34,6 +35,8 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
   const isFocused = useIsFocused();
   const { navigation } = props;
   const { width: windowWidth } = useWindowDimensions();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const { data: models = [], isLoading, error, refetch, isRefetching } = useHuggingFaceModels();
   const {
@@ -86,12 +89,12 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity onPress={() => navigation.navigate("DownloadedModels")} style={{ marginRight: 12 }}>
+        <TouchableOpacity onPress={() => navigation.navigate("DownloadedModels")} style={styles.headerButton}>
           <Ionicons name="download-outline" size={20} color={colors.primary} />
         </TouchableOpacity>
       ),
     });
-  }, [navigation]);
+  }, [navigation, styles, colors]);
 
   useEffect(() => {
     if (isFocused) {
@@ -142,15 +145,13 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
               </Text>
             ) : null}
             <View style={styles.activeDownloadTrack}>
-              <View
-                style={[styles.activeDownloadFill, { width: `${Math.min(100, Math.max(0, item.progress))}%` }]}
-              />
+              <View style={[styles.activeDownloadFill, { width: `${Math.min(100, Math.max(0, item.progress))}%` }]} />
             </View>
           </View>
         </Pressable>
       );
     },
-    [activeDownloadCardWidth, handleOpenModel],
+    [activeDownloadCardWidth, handleOpenModel, styles, colors],
   );
 
   const activeDownloadKeyExtractor = useCallback((item: ActiveDownloadItem) => item.modelId, []);
@@ -225,113 +226,117 @@ export default function ModelsScreen(props: ModelsStackScreenProps<"Models">) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.background,
-    gap: spacing.md,
-  },
-  loadingText: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  errorBanner: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.chipBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.danger,
-  },
-  errorText: {
-    ...typography.body,
-    color: colors.danger,
-    textAlign: "center",
-  },
-  activeDownloadBanner: {
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.primary,
-  },
-  activeDownloadsSection: {
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
-    flexGrow: 0,
-  },
-  activeDownloadsList: {
-    flexGrow: 0,
-  },
-  activeDownloadsListContent: {
-    flexGrow: 0,
-    paddingHorizontal: spacing.lg,
-  },
-  activeDownloadSeparator: {
-    width: spacing.sm,
-  },
-  activeDownloadsSectionTitle: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontWeight: "600",
-    marginBottom: spacing.sm,
-    marginHorizontal: spacing.lg,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  activeDownloadBannerPressed: {
-    opacity: 0.92,
-  },
-  activeDownloadContent: {
-    gap: spacing.xs,
-  },
-  activeDownloadHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  activeDownloadTitle: {
-    ...typography.caption,
-    color: colors.primary,
-    fontWeight: "600",
-    flex: 1,
-  },
-  activeDownloadRepo: {
-    ...typography.body,
-    color: colors.text,
-    fontWeight: "600",
-  },
-  activeDownloadVariant: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  activeDownloadTrack: {
-    height: 4,
-    backgroundColor: colors.progressTrack,
-    borderRadius: radii.pill,
-    overflow: "hidden",
-    marginTop: spacing.xs,
-  },
-  activeDownloadFill: {
-    height: "100%",
-    backgroundColor: colors.primary,
-  },
-  listContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xxl,
-  },
-  emptyText: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: "center",
-    paddingVertical: spacing.xxl,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    headerButton: {
+      marginRight: spacing.md,
+    },
+    loadingContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.background,
+      gap: spacing.md,
+    },
+    loadingText: {
+      ...typography.body,
+      color: colors.textSecondary,
+    },
+    errorBanner: {
+      marginHorizontal: spacing.lg,
+      marginTop: spacing.md,
+      padding: spacing.md,
+      borderRadius: radii.lg,
+      backgroundColor: colors.chipBackground,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.danger,
+    },
+    errorText: {
+      ...typography.body,
+      color: colors.danger,
+      textAlign: "center",
+    },
+    activeDownloadBanner: {
+      padding: spacing.md,
+      borderRadius: radii.lg,
+      backgroundColor: colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.primary,
+    },
+    activeDownloadsSection: {
+      marginTop: spacing.md,
+      marginBottom: spacing.xs,
+      flexGrow: 0,
+    },
+    activeDownloadsList: {
+      flexGrow: 0,
+    },
+    activeDownloadsListContent: {
+      flexGrow: 0,
+      paddingHorizontal: spacing.lg,
+    },
+    activeDownloadSeparator: {
+      width: spacing.sm,
+    },
+    activeDownloadsSectionTitle: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      fontWeight: "600",
+      marginBottom: spacing.sm,
+      marginHorizontal: spacing.lg,
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+    },
+    activeDownloadBannerPressed: {
+      opacity: 0.92,
+    },
+    activeDownloadContent: {
+      gap: spacing.xs,
+    },
+    activeDownloadHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.xs,
+    },
+    activeDownloadTitle: {
+      ...typography.caption,
+      color: colors.primary,
+      fontWeight: "600",
+      flex: 1,
+    },
+    activeDownloadRepo: {
+      ...typography.body,
+      color: colors.text,
+      fontWeight: "600",
+    },
+    activeDownloadVariant: {
+      ...typography.caption,
+      color: colors.textSecondary,
+    },
+    activeDownloadTrack: {
+      height: 4,
+      backgroundColor: colors.progressTrack,
+      borderRadius: radii.pill,
+      overflow: "hidden",
+      marginTop: spacing.xs,
+    },
+    activeDownloadFill: {
+      height: "100%",
+      backgroundColor: colors.primary,
+    },
+    listContent: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.xxl,
+    },
+    emptyText: {
+      ...typography.body,
+      color: colors.textSecondary,
+      textAlign: "center",
+      paddingVertical: spacing.xxl,
+    },
+  });

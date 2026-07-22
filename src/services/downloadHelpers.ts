@@ -59,7 +59,12 @@ export function localFileBasename(fileUri?: string): string | null {
     return null;
   }
 
-  return fileUri.replace(/^file:\/\//, "").split("/").pop() ?? null;
+  return (
+    fileUri
+      .replace(/^file:\/\//, "")
+      .split("/")
+      .pop() ?? null
+  );
 }
 
 // Fetches the byte size of a remote GGUF file from Hugging Face using an HTTP HEAD request.

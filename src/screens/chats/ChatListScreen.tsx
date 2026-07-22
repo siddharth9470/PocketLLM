@@ -1,15 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { memo, useCallback } from "react";
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { memo, useCallback, useMemo } from "react";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useDialog } from "@/components/AppDialog";
 import PrimaryButton from "@/components/PrimaryButton";
 import { ChatScreenLabels } from "@/constants/chat";
-import { colors, radii, spacing, typography } from "@/constants/theme";
+import { radii, spacing, type ThemeColors, typography } from "@/constants/theme";
 import type { ChatsStackScreenProps } from "@/navigation/types";
 import { useChatStore } from "@/stores/chatStore";
+import { useTheme } from "@/theme/ThemeProvider";
 import type { Conversation } from "@/types/chat";
 import { parseModelId } from "@/utils/parseModelId";
+import { scaleFont } from "@/utils/scaling";
 
 interface ConversationRowProps {
   conversation: Conversation;
@@ -18,6 +21,8 @@ interface ConversationRowProps {
 }
 
 const ConversationRow = memo(function ConversationRow({ conversation, onOpen, onDelete }: ConversationRowProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { name: modelName } = parseModelId(conversation.modelId || "unknown/model");
 
   return (
@@ -53,6 +58,9 @@ const ConversationRow = memo(function ConversationRow({ conversation, onOpen, on
 });
 
 export default function ChatListScreen({ navigation }: ChatsStackScreenProps<"ChatList">) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const showDialog = useDialog();
   const conversations = useChatStore((state) => state.conversations);
   const isLoadingConversations = useChatStore((state) => state.isLoadingConversations);
   const refreshConversations = useChatStore((state) => state.refreshConversations);
@@ -87,21 +95,28 @@ export default function ChatListScreen({ navigation }: ChatsStackScreenProps<"Ch
 
   const handleDeleteConversation = useCallback(
     (conversation: Conversation) => {
-      Alert.alert(ChatScreenLabels.DELETE_CHAT_TITLE, ChatScreenLabels.DELETE_CHAT_MESSAGE, [
-        { text: ChatScreenLabels.DELETE_CHAT_CANCEL, style: "cancel" },
-        {
-          text: ChatScreenLabels.DELETE_CHAT_CONFIRM,
-          style: "destructive",
-          onPress: () => {
-            void deleteConversation(conversation.id).catch((error: unknown) => {
-              console.error("Failed to delete conversation:", error);
-              Alert.alert(ChatScreenLabels.DELETE_CHAT_TITLE, ChatScreenLabels.DELETE_CHAT_FAILED);
-            });
+      showDialog({
+        title: ChatScreenLabels.DELETE_CHAT_TITLE,
+        message: ChatScreenLabels.DELETE_CHAT_MESSAGE,
+        buttons: [
+          { text: ChatScreenLabels.DELETE_CHAT_CANCEL, style: "cancel" },
+          {
+            text: ChatScreenLabels.DELETE_CHAT_CONFIRM,
+            style: "destructive",
+            onPress: () => {
+              void deleteConversation(conversation.id).catch((error: unknown) => {
+                console.error("Failed to delete conversation:", error);
+                showDialog({
+                  title: ChatScreenLabels.DELETE_CHAT_TITLE,
+                  message: ChatScreenLabels.DELETE_CHAT_FAILED,
+                });
+              });
+            },
           },
-        },
-      ]);
+        ],
+      });
     },
-    [deleteConversation],
+    [deleteConversation, showDialog],
   );
 
   const renderConversation = useCallback(
@@ -139,79 +154,79 @@ export default function ChatListScreen({ navigation }: ChatsStackScreenProps<"Ch
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.xxl,
-    gap: spacing.lg,
-  },
-  emptyText: {
-    ...typography.headline,
-    color: colors.textSecondary,
-    textAlign: "center",
-  },
-  listContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    paddingRight: spacing.lg,
-  },
-  rowPressable: {
-    flex: 1,
-    flexShrink: 1,
-    padding: spacing.lg,
-  },
-  rowContent: {
-    flex: 1,
-  },
-  title: {
-    ...typography.headline,
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  preview: {
-    ...typography.body,
-    fontSize: 15,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  modelLabel: {
-    ...typography.caption,
-    color: colors.primary,
-  },
-  deleteButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 44,
-    minHeight: 44,
-    marginLeft: spacing.xs,
-  },
-  chevron: {
-    fontSize: 24,
-    color: colors.textTertiary,
-    marginLeft: spacing.xs,
-  },
-  separator: {
-    height: spacing.md,
-  },
-  footer: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: colors.background,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    emptyState: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: spacing.xxl,
+      gap: spacing.lg,
+    },
+    emptyText: {
+      ...typography.headline,
+      color: colors.textSecondary,
+      textAlign: "center",
+    },
+    listContent: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.md,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.surface,
+      borderRadius: radii.md,
+      paddingRight: spacing.lg,
+    },
+    rowPressable: {
+      flex: 1,
+      flexShrink: 1,
+      padding: spacing.lg,
+    },
+    rowContent: {
+      flex: 1,
+    },
+    title: {
+      ...typography.headline,
+      color: colors.text,
+      marginBottom: spacing.xs,
+    },
+    preview: {
+      ...typography.body,
+      color: colors.textSecondary,
+      marginBottom: spacing.xs,
+    },
+    modelLabel: {
+      ...typography.caption,
+      color: colors.primary,
+    },
+    deleteButton: {
+      alignItems: "center",
+      justifyContent: "center",
+      minWidth: 44,
+      minHeight: 44,
+      marginLeft: spacing.xs,
+    },
+    chevron: {
+      fontSize: scaleFont(24),
+      color: colors.textTertiary,
+      marginLeft: spacing.xs,
+    },
+    separator: {
+      height: spacing.md,
+    },
+    footer: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.lg,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+      backgroundColor: colors.background,
+    },
+  });
