@@ -1,31 +1,22 @@
 import { buildCompletionResult } from "@tests/testUtils";
-import {
-  extractWebSearchQueryFromText,
-  looksLikeTextToolCall,
-  resolveWebSearchToolCall,
-} from "@/services/inference/toolCallParsing";
+import { looksLikeTextToolCall, resolveWebSearchToolCall } from "@/services/inference/toolCallParsing";
 
 const USER_FALLBACK_QUERY = "What is the price of the Cursor Pro plan?";
 
-function structuredToolCallResult(argumentsJson: string, id?: string) {
+function structuredToolCallResult(argumentsJson: string) {
   return buildCompletionResult({
-    tool_calls: [
-      { type: "function", function: { name: "web_search", arguments: argumentsJson }, ...(id ? { id } : {}) },
-    ],
+    tool_calls: [{ type: "function", function: { name: "web_search", arguments: argumentsJson } }],
   });
 }
 
 describe("resolveWebSearchToolCall", () => {
-  describe("structured tool_calls (PARSE-01, PARSE-02, PARSE-06)", () => {
+  describe("structured tool_calls (PARSE-01, PARSE-02)", () => {
     it("reads a web_search call from a JSON `query` argument", () => {
-      const result = structuredToolCallResult(JSON.stringify({ query: "cursor pro pricing" }), "call_123");
+      const result = structuredToolCallResult(JSON.stringify({ query: "cursor pro pricing" }));
 
       expect(resolveWebSearchToolCall(result, USER_FALLBACK_QUERY)).toEqual({
         query: "cursor pro pricing",
-        mode: "structured",
-        toolCallId: "call_123",
-        assistantToolCalls: result.tool_calls,
-        assistantContent: "",
+        source: "structured",
       });
     });
 
@@ -35,10 +26,10 @@ describe("resolveWebSearchToolCall", () => {
       expect(resolveWebSearchToolCall(result, USER_FALLBACK_QUERY)?.query).toBe("iphone 17 price");
     });
 
-    it("defaults the tool call id when the native payload omits it", () => {
-      const result = structuredToolCallResult(JSON.stringify({ query: "weather today" }));
+    it("normalizes Gemma quote tokens in the arguments payload", () => {
+      const result = structuredToolCallResult('{<|"|>query<|"|>: <|"|>weather in delhi<|"|>}');
 
-      expect(resolveWebSearchToolCall(result, USER_FALLBACK_QUERY)?.toolCallId).toBe("web_search_0");
+      expect(resolveWebSearchToolCall(result, USER_FALLBACK_QUERY)?.query).toBe("weather in delhi");
     });
 
     it("ignores tool calls that are not web_search", () => {
@@ -50,7 +41,7 @@ describe("resolveWebSearchToolCall", () => {
       expect(resolveWebSearchToolCall(result, USER_FALLBACK_QUERY)).toBeNull();
     });
 
-    it("rejects a structured call whose query is itself tool-call syntax (PARSE-06)", () => {
+    it("returns null when the structured arguments are not valid JSON", () => {
       const result = structuredToolCallResult("<|tool_call|>call:web_search{}");
 
       expect(resolveWebSearchToolCall(result, USER_FALLBACK_QUERY)).toBeNull();
@@ -58,24 +49,23 @@ describe("resolveWebSearchToolCall", () => {
   });
 
   describe("Gemma-style text tool calls (PARSE-03, PARSE-04)", () => {
-    it("resolves an inline text tool call as mode 'text'", () => {
+    it("resolves an inline text tool call as source 'text'", () => {
       const result = buildCompletionResult({
         content: '<|tool_call|>call:web_search{"query": "cursor pro price"}',
       });
 
-      expect(resolveWebSearchToolCall(result, USER_FALLBACK_QUERY)).toMatchObject({
+      expect(resolveWebSearchToolCall(result, USER_FALLBACK_QUERY)).toEqual({
         query: "cursor pro price",
-        mode: "text",
-        toolCallId: "web_search_0",
+        source: "text",
       });
     });
 
     it("falls back to the user prompt when the query cannot be extracted (PARSE-04)", () => {
       const result = buildCompletionResult({ content: "<|tool_call|>call:web_search{ malformed }" });
 
-      expect(resolveWebSearchToolCall(result, USER_FALLBACK_QUERY)).toMatchObject({
+      expect(resolveWebSearchToolCall(result, USER_FALLBACK_QUERY)).toEqual({
         query: USER_FALLBACK_QUERY,
-        mode: "text",
+        source: "text",
       });
     });
 
@@ -114,27 +104,5 @@ describe("looksLikeTextToolCall (PARSE-08)", () => {
     expect(looksLikeTextToolCall("I ran a web_search for you.")).toBe(false);
     expect(looksLikeTextToolCall("<|tool_call|> some other tool")).toBe(false);
     expect(looksLikeTextToolCall("just a normal sentence")).toBe(false);
-  });
-});
-
-describe("extractWebSearchQueryFromText (PARSE-07)", () => {
-  it("extracts a Gemma quoted query token", () => {
-    expect(extractWebSearchQueryFromText('queries:[<|"|>iphone 17 price<|"|>]')).toBe("iphone 17 price");
-  });
-
-  it("extracts a bracketed array query", () => {
-    expect(extractWebSearchQueryFromText('queries:["cursor pro price"]')).toBe("cursor pro price");
-  });
-
-  it("extracts a single quoted `query` field", () => {
-    expect(extractWebSearchQueryFromText('{"query": "weather in delhi"}')).toBe("weather in delhi");
-  });
-
-  it("extracts the query from a call body payload", () => {
-    expect(extractWebSearchQueryFromText('call:web_search{"query": "latest ai news"}')).toBe("latest ai news");
-  });
-
-  it("returns null when no recognizable query format is present", () => {
-    expect(extractWebSearchQueryFromText("no query here")).toBeNull();
   });
 });

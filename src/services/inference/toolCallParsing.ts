@@ -1,197 +1,99 @@
 import type { NativeCompletionResult } from "llama.rn";
 
 const WEB_SEARCH_TOOL_NAME = "web_search";
-const DEFAULT_TOOL_CALL_ID = "web_search_0";
 
-/** Detects Gemma-style inline tool syntax in model output. */
-const TEXT_TOOL_CALL_PATTERN =
-  /(?:<\|tool_call\|>|<tool_call\|>|call:web_search)/i;
-
-type ToolArguments = {
-  query?: string;
-  queries?: string[];
-};
+/** Gemma emits quotes as this token instead of a plain `"`; normalized before JSON parsing. */
+const GEMMA_QUOTE_TOKEN = '<|"|>';
 
 /** Parsed `web_search` request extracted from a llama.rn completion result. */
 export interface WebSearchToolCall {
   query: string;
-  mode: "structured" | "text";
-  toolCallId: string;
-  assistantToolCalls?: NativeCompletionResult["tool_calls"];
-  assistantContent?: string;
+  source: "structured" | "text";
+}
+
+/** Shape of the `web_search` tool arguments object once parsed from JSON. */
+interface WebSearchArguments {
+  query?: string;
+  queries?: string[];
 }
 
 /**
- * Determines whether a llama.rn pass 1 result requested a web search.
- * Checks structured `tool_calls` first, then Gemma-style text tool syntax.
+ * Determines whether a completion requested a web search.
+ *
+ * Structured `tool_calls` are the source of truth; when a model instead emits the
+ * tool call as raw text, we detect it and fall back to `fallbackQuery` (the user's
+ * prompt) rather than scraping the query with brittle patterns.
  */
 export function resolveWebSearchToolCall(
   result: NativeCompletionResult,
   fallbackQuery: string,
 ): WebSearchToolCall | null {
-  const fromStructured = parseStructuredToolCall(result);
-  if (fromStructured) {
-    return fromStructured;
+  const structuredQuery = readStructuredWebSearchQuery(result);
+  if (structuredQuery) {
+    return { query: structuredQuery, source: "structured" };
   }
 
-  return parseTextToolCall(result, fallbackQuery);
-}
-
-/**
- * Returns true when the text looks like an inline `web_search` tool invocation
- * (common with models that emit tool syntax as plain text).
- */
-export function looksLikeTextToolCall(text: string): boolean {
-  return /web_search/i.test(text) && TEXT_TOOL_CALL_PATTERN.test(text);
-}
-
-/**
- * Extracts a search query string from raw tool-call text.
- * Supports Gemma token formats, JSON arguments, and simple `query` fields.
- */
-export function extractWebSearchQueryFromText(text: string): string | null {
-  for (const extract of QUERY_TEXT_EXTRACTORS) {
-    const query = extract(text);
-    if (query) {
-      return query;
-    }
-  }
-
-  return null;
-}
-
-/**
- * Combines `content` and `text` from a llama.rn result for tool-call detection.
- */
-function combineResultText(result: NativeCompletionResult): string {
-  return `${result.content ?? ""}\n${result.text ?? ""}`.trim();
-}
-
-/**
- * Reads a structured `web_search` entry from llama.rn `tool_calls`.
- */
-function parseStructuredToolCall(result: NativeCompletionResult): WebSearchToolCall | null {
-  const call = result.tool_calls?.find((entry) => entry.function.name === WEB_SEARCH_TOOL_NAME);
-  if (!call) {
-    return null;
-  }
-
-  const query = parseToolArguments(call.function.arguments);
-  if (!isUsableQuery(query)) {
-    return null;
-  }
-
-  return {
-    query,
-    mode: "structured",
-    toolCallId: call.id ?? DEFAULT_TOOL_CALL_ID,
-    assistantToolCalls: result.tool_calls,
-    assistantContent: result.content ?? "",
-  };
-}
-
-/**
- * Reads a text-embedded `web_search` call when structured `tool_calls` are absent.
- */
-function parseTextToolCall(
-  result: NativeCompletionResult,
-  fallbackQuery: string,
-): WebSearchToolCall | null {
-  const rawText = combineResultText(result);
+  const rawText = joinResultText(result);
   if (!looksLikeTextToolCall(rawText)) {
     return null;
   }
 
-  const query = extractWebSearchQueryFromText(rawText) || fallbackQuery.trim();
-  if (!isUsableQuery(query)) {
-    return null;
-  }
+  const query = readInlineWebSearchQuery(rawText) ?? fallbackQuery.trim();
+  return query.length > 0 ? { query, source: "text" } : null;
+}
 
-  return {
-    query,
-    mode: "text",
-    toolCallId: DEFAULT_TOOL_CALL_ID,
-    assistantContent: result.content ?? "",
-  };
+/** True when raw model output contains an inline `web_search` tool invocation. */
+export function looksLikeTextToolCall(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  return lowerText.includes(WEB_SEARCH_TOOL_NAME) && (lowerText.includes("tool_call") || lowerText.includes("call:"));
+}
+
+/** Combines the `content` and `text` channels of a completion result. */
+function joinResultText(result: NativeCompletionResult): string {
+  return `${result.content ?? ""}\n${result.text ?? ""}`.trim();
+}
+
+/** Reads the query from structured `tool_calls`, when a `web_search` call is present. */
+function readStructuredWebSearchQuery(result: NativeCompletionResult): string | null {
+  const webSearchCall = result.tool_calls?.find((call) => call.function.name === WEB_SEARCH_TOOL_NAME);
+  return webSearchCall ? readQueryFromArgumentsJson(webSearchCall.function.arguments) : null;
+}
+
+/** Reads the query from an inline tool call by parsing its embedded JSON argument object. */
+function readInlineWebSearchQuery(rawText: string): string | null {
+  const argumentsJson = extractJsonObject(rawText);
+  return argumentsJson ? readQueryFromArgumentsJson(argumentsJson) : null;
 }
 
 /**
- * Parses tool `arguments` JSON, falling back to text extraction for malformed payloads.
+ * Parses a `web_search` arguments JSON string and returns the first usable query.
+ * Gemma quote tokens are normalized to standard quotes so the payload parses.
  */
-function parseToolArguments(argumentsJson: string): string {
-  const fromJson = readQueryFromJson(argumentsJson);
-  if (fromJson) {
-    return fromJson;
-  }
+function readQueryFromArgumentsJson(argumentsJson: string): string | null {
+  const normalizedJson = argumentsJson.split(GEMMA_QUOTE_TOKEN).join('"');
 
-  return extractWebSearchQueryFromText(argumentsJson) ?? argumentsJson.trim();
-}
-
-/** Parses `{ query }` or `{ queries: [...] }` from a JSON string. */
-function readQueryFromJson(json: string): string | null {
   try {
-    const parsed = JSON.parse(json) as ToolArguments;
-    return firstQueryFromArgs(parsed);
+    const parsedArguments = JSON.parse(normalizedJson) as WebSearchArguments;
+    return firstUsableQuery(parsedArguments);
   } catch {
     return null;
   }
 }
 
-/** Returns the first non-empty query from parsed tool arguments. */
-function firstQueryFromArgs(args: ToolArguments): string | null {
-  const direct = trimOrNull(args.query);
-  if (direct) {
-    return direct;
+/** Returns the first non-empty `query`, or the first non-empty `queries[]` entry. */
+function firstUsableQuery(args: WebSearchArguments): string | null {
+  const singleQuery = args.query?.trim();
+  if (singleQuery) {
+    return singleQuery;
   }
 
-  const fromList = args.queries?.map((entry) => trimOrNull(entry)).find(Boolean);
-  return fromList ?? null;
+  const listQuery = args.queries?.map((entry) => entry.trim()).find((entry) => entry.length > 0);
+  return listQuery ?? null;
 }
 
-/** Query is usable when non-empty and not itself a nested tool-call string. */
-function isUsableQuery(query: string): boolean {
-  return query.length > 0 && !looksLikeTextToolCall(query);
-}
-
-function trimOrNull(value: string | undefined): string | null {
-  const trimmed = value?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : null;
-}
-
-/** Ordered text extractors — first match wins. */
-const QUERY_TEXT_EXTRACTORS: Array<(text: string) => string | null> = [
-  extractGemmaQuotedQuery,
-  extractQueriesArrayQuery,
-  extractQueryField,
-  extractCallBodyQuery,
-];
-
-/** Gemma: `queries:[<|"|>search terms<|"|>]` */
-function extractGemmaQuotedQuery(text: string): string | null {
-  return trimOrNull(text.match(/queries:\s*\[[^\]]*<\|"\|>([^<]+)<\|"\|>/i)?.[1]);
-}
-
-/** Bracket list: `queries:["search terms"]` or unquoted variant. */
-function extractQueriesArrayQuery(text: string): string | null {
-  return trimOrNull(text.match(/queries:\s*\[\s*["']?([^"'[\]]+)["']?\s*\]/i)?.[1]);
-}
-
-/** Single field: `"query": "search terms"` */
-function extractQueryField(text: string): string | null {
-  return trimOrNull(text.match(/["']?query["']?\s*:\s*["']([^"']+)["']/i)?.[1]);
-}
-
-/** Body after `call:web_search{...}` — tries JSON, then unquoted array fallback. */
-function extractCallBodyQuery(text: string): string | null {
-  const body = text.match(/call:web_search\s*(\{[\s\S]*?\})/i)?.[1];
-  if (!body) {
-    return null;
-  }
-
-  const fromJson = readQueryFromJson(body.replace(/<\|"\|>/g, '"'));
-  if (fromJson) {
-    return fromJson;
-  }
-
-  return trimOrNull(body.match(/queries:\s*\[\s*([^[\]{}]+?)\s*\]/i)?.[1]);
+/** Extracts the outermost `{...}` JSON object substring from text, or null if absent. */
+function extractJsonObject(text: string): string | null {
+  const objectStart = text.indexOf("{");
+  const objectEnd = text.lastIndexOf("}");
+  return objectStart !== -1 && objectEnd > objectStart ? text.slice(objectStart, objectEnd + 1) : null;
 }
