@@ -2,7 +2,6 @@ import { useFocusEffect } from "@react-navigation/native";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Keyboard,
   Pressable,
   StyleSheet,
@@ -21,14 +20,16 @@ import {
   Send,
 } from "react-native-gifted-chat";
 
+import { useDialog } from "@/components/AppDialog";
 import { ChatMessageMarkdown } from "@/components/ChatMessageMarkdown";
 import ModelPicker from "@/components/ModelPicker";
 import { ChatScreenLabels } from "@/constants/chat";
-import { colors, radii, spacing, typography } from "@/constants/theme";
+import { radii, spacing, type ThemeColors, typography } from "@/constants/theme";
 import { getDownloadedModelsList } from "@/db/ModelDB";
 import type { ChatsStackScreenProps } from "@/navigation/types";
 import { initializeModel, resolveDownloadedModelPath } from "@/services/chatHelper";
 import { useChatStore } from "@/stores/chatStore";
+import { useTheme } from "@/theme/ThemeProvider";
 import type { HuggingFaceModel } from "@/types/models";
 import { generateChatId } from "@/utils/chatIds";
 import { isLanguageModelGgufFilename } from "@/utils/ggufFileSelection";
@@ -41,6 +42,8 @@ const COMPOSER_MAX_LINES = 6;
 const COMPOSER_MAX_HEIGHT = COMPOSER_LINE_HEIGHT * COMPOSER_MAX_LINES + COMPOSER_VERTICAL_PADDING;
 
 function ChatComposer({ text = "", textInputProps }: ComponentProps<typeof Composer>) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [inputHeight, setInputHeight] = useState(COMPOSER_MIN_HEIGHT);
 
   useEffect(() => {
@@ -76,7 +79,7 @@ function ChatComposer({ text = "", textInputProps }: ComponentProps<typeof Compo
         scrollEnabled={inputHeight >= COMPOSER_MAX_HEIGHT}
         enablesReturnKeyAutomatically
         underlineColorAndroid="transparent"
-        keyboardAppearance="light"
+        keyboardAppearance="dark"
         placeholder={placeholder}
         onContentSizeChange={handleContentSizeChange}
         style={[styles.composerInput, { height: Math.max(COMPOSER_MIN_HEIGHT, inputHeight) }, textInputProps?.style]}
@@ -96,6 +99,9 @@ function isDownloadReadyModel(model: HuggingFaceModel): boolean {
 
 export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<"Chat">) {
   const { conversationId } = route.params;
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const showDialog = useDialog();
 
   const conversation = useChatStore((state) => state.conversationDetails[conversationId]);
   const loadConversation = useChatStore((state) => state.loadConversation);
@@ -115,9 +121,12 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
   const isMountedRef = useRef(true);
 
-  const showChatError = useCallback((message: string) => {
-    Alert.alert(ChatScreenLabels.INFERENCE_ERROR_TITLE, message);
-  }, []);
+  const showChatError = useCallback(
+    (message: string) => {
+      showDialog({ title: ChatScreenLabels.INFERENCE_ERROR_TITLE, message });
+    },
+    [showDialog],
+  );
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -295,9 +304,13 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
 
   const renderInputToolbar = useCallback(
     (props: ComponentProps<typeof InputToolbar>) => (
-      <InputToolbar {...props} containerStyle={styles.inputToolbarContainer} primaryStyle={styles.inputToolbarPrimary} />
+      <InputToolbar
+        {...props}
+        containerStyle={styles.inputToolbarContainer}
+        primaryStyle={styles.inputToolbarPrimary}
+      />
     ),
-    [],
+    [styles],
   );
 
   const renderComposer = useCallback((props: ComponentProps<typeof Composer>) => <ChatComposer {...props} />, []);
@@ -321,7 +334,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
       accessibilityLabel,
       placeholderTextColor: colors.textSecondary,
     };
-  }, [isLoadingModel, isModelReady]);
+  }, [isLoadingModel, isModelReady, colors]);
 
   const handleSelectModel = useCallback(
     async (model: HuggingFaceModel) => {
@@ -387,7 +400,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
         }}
       />
     ),
-    [],
+    [styles],
   );
 
   if (isInitialLoad && conversation === undefined) {
@@ -423,7 +436,7 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
             messages={giftedMessages}
             onSend={handleSend}
             user={CHAT_USER}
-            colorScheme="light"
+            colorScheme="dark"
             messageIdGenerator={generateChatId}
             renderBubble={renderBubble}
             renderMessageText={renderMessageText}
@@ -446,73 +459,74 @@ export default function ChatScreen({ route, navigation }: ChatsStackScreenProps<
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.background,
-  },
-  modelPromptBanner: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.chipBackground,
-  },
-  modelPromptText: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: "center",
-  },
-  modelPickerRow: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-    alignItems: "flex-end",
-  },
-  chatContainer: {
-    flex: 1,
-  },
-  messagesContainer: {
-    backgroundColor: colors.background,
-  },
-  inputToolbarContainer: {
-    backgroundColor: colors.background,
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingBottom: spacing.xs,
-  },
-  inputToolbarPrimary: {
-    alignItems: "flex-end",
-    backgroundColor: colors.background,
-  },
-  composerContainer: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  composerInput: {
-    ...typography.body,
-    color: colors.text,
-    backgroundColor: colors.chipBackground,
-    borderRadius: radii.lg,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    marginHorizontal: spacing.sm,
-    lineHeight: COMPOSER_LINE_HEIGHT,
-    textAlignVertical: "center",
-  },
-  userBubble: {
-    backgroundColor: colors.userBubble,
-    borderBottomRightRadius: radii.sm,
-  },
-  assistantBubble: {
-    backgroundColor: colors.assistantBubble,
-    borderBottomLeftRadius: radii.sm,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    loadingContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.background,
+    },
+    modelPromptBanner: {
+      marginHorizontal: spacing.lg,
+      marginTop: spacing.sm,
+      padding: spacing.md,
+      borderRadius: radii.lg,
+      backgroundColor: colors.chipBackground,
+    },
+    modelPromptText: {
+      ...typography.body,
+      color: colors.textSecondary,
+      textAlign: "center",
+    },
+    modelPickerRow: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.xs,
+      alignItems: "flex-end",
+    },
+    chatContainer: {
+      flex: 1,
+    },
+    messagesContainer: {
+      backgroundColor: colors.background,
+    },
+    inputToolbarContainer: {
+      backgroundColor: colors.background,
+      borderTopColor: colors.border,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      paddingBottom: spacing.xs,
+    },
+    inputToolbarPrimary: {
+      alignItems: "flex-end",
+      backgroundColor: colors.background,
+    },
+    composerContainer: {
+      flex: 1,
+      justifyContent: "center",
+    },
+    composerInput: {
+      ...typography.body,
+      color: colors.text,
+      backgroundColor: colors.chipBackground,
+      borderRadius: radii.lg,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.sm,
+      marginHorizontal: spacing.sm,
+      lineHeight: COMPOSER_LINE_HEIGHT,
+      textAlignVertical: "center",
+    },
+    userBubble: {
+      backgroundColor: colors.userBubble,
+      borderBottomRightRadius: radii.sm,
+    },
+    assistantBubble: {
+      backgroundColor: colors.assistantBubble,
+      borderBottomLeftRadius: radii.sm,
+    },
+  });

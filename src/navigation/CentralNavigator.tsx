@@ -2,8 +2,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { type BottomTabNavigationOptions, createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import type { RouteProp } from "@react-navigation/native";
 import { createNativeStackNavigator, type NativeStackNavigationOptions } from "@react-navigation/native-stack";
+import { useCallback, useMemo } from "react";
 
-import { colors } from "@/constants/theme";
+import type { ThemeColors } from "@/constants/theme";
 import type {
   ChatsStackParamList,
   MainTabParamList,
@@ -19,6 +20,8 @@ import ModelDetailsScreen from "@/screens/models/ModelDetails";
 import ModelsScreen from "@/screens/models/ModelsScreen";
 import DeviceInfoScreen from "@/screens/settings/DeviceInfo";
 import SettingsScreen from "@/screens/settings/SettingsScreen";
+import { useTheme } from "@/theme/ThemeProvider";
+import { scaleFont } from "@/utils/scaling";
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -33,31 +36,14 @@ const TAB_ICONS: Record<keyof MainTabParamList, keyof typeof Ionicons.glyphMap> 
 };
 
 /** Flat, themed header shared by every native stack. Blurred screens are frozen to avoid wasted renders. */
-const stackScreenOptions: NativeStackNavigationOptions = {
-  headerShadowVisible: false,
-  headerStyle: { backgroundColor: colors.background },
-  contentStyle: { backgroundColor: colors.background },
-  freezeOnBlur: true,
-};
-
-const settingsStackScreenOptions: NativeStackNavigationOptions = {
-  ...stackScreenOptions,
-  headerLargeTitle: true,
-};
-
-/** Tab options with a per-route icon; inactive tabs are frozen to keep lifecycles clean. */
-function tabScreenOptions({
-  route,
-}: {
-  route: RouteProp<MainTabParamList, keyof MainTabParamList>;
-}): BottomTabNavigationOptions {
+function buildStackScreenOptions(colors: ThemeColors): NativeStackNavigationOptions {
   return {
-    headerShown: false,
+    headerShadowVisible: false,
+    headerStyle: { backgroundColor: colors.surface },
+    headerTintColor: colors.text,
+    headerTitleStyle: { color: colors.text, fontSize: scaleFont(17), fontWeight: "600" },
+    contentStyle: { backgroundColor: colors.background },
     freezeOnBlur: true,
-    tabBarActiveTintColor: colors.tabActive,
-    tabBarInactiveTintColor: colors.tabInactive,
-    tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-    tabBarIcon: ({ color, size }) => <Ionicons name={TAB_ICONS[route.name]} size={size} color={color} />,
   };
 }
 
@@ -83,8 +69,22 @@ export default function CentralNavigator() {
 }
 
 function MainTabs() {
+  const { colors } = useTheme();
+
+  const screenOptions = useCallback(
+    ({ route }: { route: RouteProp<MainTabParamList, keyof MainTabParamList> }): BottomTabNavigationOptions => ({
+      headerShown: false,
+      freezeOnBlur: true,
+      tabBarActiveTintColor: colors.tabActive,
+      tabBarInactiveTintColor: colors.tabInactive,
+      tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+      tabBarIcon: ({ color, size }) => <Ionicons name={TAB_ICONS[route.name]} size={size} color={color} />,
+    }),
+    [colors],
+  );
+
   return (
-    <Tab.Navigator screenOptions={tabScreenOptions}>
+    <Tab.Navigator screenOptions={screenOptions}>
       <Tab.Screen name="ModelsTab" component={ModelsStackScreen} options={{ title: "Models" }} />
       <Tab.Screen name="ChatsTab" component={ChatsStackScreen} options={{ title: "Chats" }} />
       <Tab.Screen name="SettingsTab" component={SettingsStackScreen} options={{ title: "Settings" }} />
@@ -93,8 +93,11 @@ function MainTabs() {
 }
 
 function ModelsStackScreen() {
+  const { colors } = useTheme();
+  const screenOptions = useMemo(() => buildStackScreenOptions(colors), [colors]);
+
   return (
-    <ModelsStack.Navigator screenOptions={stackScreenOptions}>
+    <ModelsStack.Navigator screenOptions={screenOptions}>
       <ModelsStack.Screen name="Models" component={ModelsScreen} options={{ title: "Models" }} />
       <ModelsStack.Screen
         name="DownloadedModels"
@@ -107,17 +110,23 @@ function ModelsStackScreen() {
 }
 
 function ChatsStackScreen() {
+  const { colors } = useTheme();
+  const screenOptions = useMemo(() => buildStackScreenOptions(colors), [colors]);
+
   return (
-    <ChatsStack.Navigator screenOptions={stackScreenOptions}>
-      <ChatsStack.Screen name="ChatList" component={ChatListScreen} />
+    <ChatsStack.Navigator screenOptions={screenOptions}>
+      <ChatsStack.Screen name="ChatList" component={ChatListScreen} options={{ title: "Chats" }} />
       <ChatsStack.Screen name="Chat" component={ChatScreen} options={chatScreenOptions} />
     </ChatsStack.Navigator>
   );
 }
 
 function SettingsStackScreen() {
+  const { colors } = useTheme();
+  const screenOptions = useMemo(() => buildStackScreenOptions(colors), [colors]);
+
   return (
-    <SettingsStack.Navigator screenOptions={settingsStackScreenOptions}>
+    <SettingsStack.Navigator screenOptions={screenOptions}>
       <SettingsStack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
       <SettingsStack.Screen name="DeviceInfo" component={DeviceInfoScreen} options={{ title: "Device Info" }} />
     </SettingsStack.Navigator>

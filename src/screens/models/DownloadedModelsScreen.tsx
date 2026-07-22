@@ -1,22 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
-import { memo, useCallback, useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
+import { useDialog } from "@/components/AppDialog";
 import { DownloadedModelsLabels } from "@/constants/downloadedModels";
-import { colors, radii, spacing, typography } from "@/constants/theme";
+import { radii, spacing, type ThemeColors, typography } from "@/constants/theme";
 import { getDownloadedModelsList } from "@/db/ModelDB";
 import type { ModelsStackScreenProps } from "@/navigation/types";
 import { useModelDownloader } from "@/services/useModelDownloader";
+import { useTheme } from "@/theme/ThemeProvider";
 import type { HuggingFaceModel } from "@/types/models";
 import { formatFileSize } from "@/utils/formatFileSize";
 import { parseModelId } from "@/utils/parseModelId";
@@ -48,6 +41,8 @@ function formatDownloadedAt(timestamp: number | undefined): string {
 }
 
 const DownloadedModelRow = memo(function DownloadedModelRow({ item, onOpen, onDelete }: DownloadedModelRowProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { author, name } = parseModelId(item.id);
   const localPath = item.downloadInfo?.localFilePath ?? "";
   const storedSizeBytes = item.downloadInfo?.fileSizeBytes;
@@ -109,6 +104,9 @@ const DownloadedModelRow = memo(function DownloadedModelRow({ item, onOpen, onDe
 export default function DownloadedModelsScreen({ navigation }: ModelsStackScreenProps<"DownloadedModels">) {
   const isFocused = useIsFocused();
   const { width } = useWindowDimensions();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const showDialog = useDialog();
   const contentMaxWidth = Math.min(width - spacing.lg * 2, 720);
   const { deleteDownloadedModel } = useModelDownloader();
 
@@ -148,24 +146,28 @@ export default function DownloadedModelsScreen({ navigation }: ModelsStackScreen
     (item: HuggingFaceModel) => {
       const { name } = parseModelId(item.id);
 
-      Alert.alert(DownloadedModelsLabels.DELETE_TITLE, DownloadedModelsLabels.DELETE_MESSAGE(name), [
-        { text: DownloadedModelsLabels.CANCEL, style: "cancel" },
-        {
-          text: DownloadedModelsLabels.DELETE,
-          style: "destructive",
-          onPress: () => {
-            void deleteDownloadedModel(item.id)
-              .then(() => {
-                setModels((currentModels) => currentModels.filter((model) => model.id !== item.id));
-              })
-              .catch((error: unknown) => {
-                console.error(`Failed to delete downloaded model ${item.id}:`, error);
-              });
+      showDialog({
+        title: DownloadedModelsLabels.DELETE_TITLE,
+        message: DownloadedModelsLabels.DELETE_MESSAGE(name),
+        buttons: [
+          { text: DownloadedModelsLabels.CANCEL, style: "cancel" },
+          {
+            text: DownloadedModelsLabels.DELETE,
+            style: "destructive",
+            onPress: () => {
+              void deleteDownloadedModel(item.id)
+                .then(() => {
+                  setModels((currentModels) => currentModels.filter((model) => model.id !== item.id));
+                })
+                .catch((error: unknown) => {
+                  console.error(`Failed to delete downloaded model ${item.id}:`, error);
+                });
+            },
           },
-        },
-      ]);
+        ],
+      });
     },
-    [deleteDownloadedModel],
+    [deleteDownloadedModel, showDialog],
   );
 
   const renderItem = useCallback(
@@ -209,114 +211,115 @@ export default function DownloadedModelsScreen({ navigation }: ModelsStackScreen
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.background,
-  },
-  listContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xxl,
-  },
-  listContentEmpty: {
-    flexGrow: 1,
-    justifyContent: "center",
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  cardPressed: {
-    opacity: 0.92,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  titleBlock: {
-    flex: 1,
-    flexShrink: 1,
-  },
-  author: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  modelName: {
-    ...typography.headline,
-    color: colors.text,
-  },
-  deleteButton: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.md,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.chipBackground,
-  },
-  metadataRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  metadataChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    flexShrink: 1,
-  },
-  metadataChipText: {
-    ...typography.caption,
-    color: colors.primary,
-    fontWeight: "600",
-  },
-  metadataSecondaryText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  metadataDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: 14,
-    backgroundColor: colors.border,
-  },
-  path: {
-    ...typography.caption,
-    color: colors.textTertiary,
-    fontFamily: "monospace",
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingHorizontal: spacing.xl,
-  },
-  emptyTitle: {
-    ...typography.headline,
-    color: colors.text,
-    textAlign: "center",
-    marginBottom: spacing.sm,
-  },
-  emptyHint: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: "center",
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    loadingContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.background,
+    },
+    listContent: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.xxl,
+    },
+    listContentEmpty: {
+      flexGrow: 1,
+      justifyContent: "center",
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: radii.lg,
+      padding: spacing.lg,
+      marginBottom: spacing.lg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 1,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    cardPressed: {
+      opacity: 0.92,
+    },
+    cardHeader: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: spacing.md,
+      marginBottom: spacing.md,
+    },
+    titleBlock: {
+      flex: 1,
+      flexShrink: 1,
+    },
+    author: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      marginBottom: spacing.xs,
+    },
+    modelName: {
+      ...typography.headline,
+      color: colors.text,
+    },
+    deleteButton: {
+      width: 44,
+      height: 44,
+      borderRadius: radii.md,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.chipBackground,
+    },
+    metadataRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      gap: spacing.sm,
+      marginBottom: spacing.sm,
+    },
+    metadataChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.xs,
+      flexShrink: 1,
+    },
+    metadataChipText: {
+      ...typography.caption,
+      color: colors.primary,
+      fontWeight: "600",
+    },
+    metadataSecondaryText: {
+      ...typography.caption,
+      color: colors.textSecondary,
+    },
+    metadataDivider: {
+      width: StyleSheet.hairlineWidth,
+      height: 14,
+      backgroundColor: colors.border,
+    },
+    path: {
+      ...typography.caption,
+      color: colors.textTertiary,
+      fontFamily: "monospace",
+    },
+    emptyState: {
+      alignItems: "center",
+      paddingHorizontal: spacing.xl,
+    },
+    emptyTitle: {
+      ...typography.headline,
+      color: colors.text,
+      textAlign: "center",
+      marginBottom: spacing.sm,
+    },
+    emptyHint: {
+      ...typography.body,
+      color: colors.textSecondary,
+      textAlign: "center",
+    },
+  });

@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { ChatScreenLabels } from "@/constants/chat";
-import { colors, radii, spacing, typography } from "@/constants/theme";
+import { radii, spacing, type ThemeColors, typography } from "@/constants/theme";
 import { getDownloadedModelsList } from "@/db/ModelDB";
+import { useTheme } from "@/theme/ThemeProvider";
 import type { HuggingFaceModel } from "@/types/models";
 import { isLanguageModelGgufFilename } from "@/utils/ggufFileSelection";
 import { parseModelId } from "@/utils/parseModelId";
@@ -32,6 +33,8 @@ export default function ModelPicker({
   onClose,
   onSelectModel,
 }: ModelPickerProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const isControlled = visible !== undefined;
   const [internalVisible, setInternalVisible] = useState(false);
   const [availableModels, setAvailableModels] = useState<HuggingFaceModel[]>([]);
@@ -144,6 +147,8 @@ const ModelListItem = memo(
     isSelected: boolean;
     onSelect: (item: HuggingFaceModel) => void;
   }) => {
+    const { colors } = useTheme();
+    const styles = useMemo(() => createStyles(colors), [colors]);
     const { author, name } = parseModelId(item.id);
 
     return (
@@ -158,74 +163,74 @@ const ModelListItem = memo(
   },
 );
 
-const styles = StyleSheet.create({
-  trigger: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    maxWidth: "100%",
-    alignSelf: "flex-end",
-    backgroundColor: colors.chipBackground,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  triggerText: {
-    ...typography.caption,
-    color: colors.primary,
-    fontWeight: "600",
-    flexShrink: 1,
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radii.lg,
-    borderTopRightRadius: radii.lg,
-    padding: spacing.lg,
-    maxHeight: "55%",
-  },
-  sheetTitle: {
-    ...typography.headline,
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  sheetPrompt: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
-  },
-  emptyText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    paddingVertical: spacing.lg,
-  },
-  option: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  optionSelected: {
-    backgroundColor: colors.chipBackground,
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.sm,
-  },
-  optionTextWrap: {
-    flex: 1,
-  },
-  optionName: {
-    ...typography.headline,
-    fontSize: 15,
-    color: colors.text,
-  },
-  optionAuthor: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    trigger: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.xs,
+      maxWidth: "100%",
+      alignSelf: "flex-end",
+      backgroundColor: colors.chipBackground,
+      borderRadius: radii.pill,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+    },
+    triggerText: {
+      ...typography.caption,
+      color: colors.primary,
+      fontWeight: "600",
+      flexShrink: 1,
+    },
+    backdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.5)",
+      justifyContent: "flex-end",
+    },
+    sheet: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: radii.lg,
+      borderTopRightRadius: radii.lg,
+      padding: spacing.lg,
+      maxHeight: "55%",
+    },
+    sheetTitle: {
+      ...typography.headline,
+      color: colors.text,
+      marginBottom: spacing.xs,
+    },
+    sheetPrompt: {
+      ...typography.body,
+      color: colors.textSecondary,
+      marginBottom: spacing.md,
+    },
+    emptyText: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      paddingVertical: spacing.lg,
+    },
+    option: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: spacing.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    optionSelected: {
+      backgroundColor: colors.chipBackground,
+      borderRadius: radii.sm,
+      paddingHorizontal: spacing.sm,
+    },
+    optionTextWrap: {
+      flex: 1,
+    },
+    optionName: {
+      ...typography.headline,
+      color: colors.text,
+    },
+    optionAuthor: {
+      ...typography.caption,
+      color: colors.textSecondary,
+    },
+  });

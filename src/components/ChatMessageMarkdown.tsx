@@ -2,9 +2,11 @@ import { memo, useMemo } from "react";
 import { Platform, StyleSheet, Text, type TextStyle, View } from "react-native";
 import Markdown, { type MarkdownProps, renderRules } from "react-native-markdown-display";
 
-import { colors, radii, spacing, typography } from "@/constants/theme";
+import { radii, spacing, type ThemeColors, typography } from "@/constants/theme";
+import { useTheme } from "@/theme/ThemeProvider";
+import { scaleFont, scaleSize } from "@/utils/scaling";
 
-const MESSAGE_LINE_HEIGHT = 22;
+const MESSAGE_LINE_HEIGHT = scaleFont(22);
 
 type ChatMessagePosition = "left" | "right";
 
@@ -13,12 +15,8 @@ type ChatMessageMarkdownProps = {
   position: ChatMessagePosition;
 };
 
-function resolveTextColor(position: ChatMessagePosition): string {
-  return position === "right" ? colors.userBubbleText : colors.assistantText;
-}
-
-function buildMarkdownStyles(position: ChatMessagePosition): MarkdownProps["style"] {
-  const textColor = resolveTextColor(position);
+function buildMarkdownStyles(position: ChatMessagePosition, colors: ThemeColors): MarkdownProps["style"] {
+  const textColor = position === "right" ? colors.userBubbleText : colors.assistantText;
   const baseText: TextStyle = {
     ...typography.body,
     color: textColor,
@@ -92,21 +90,21 @@ function buildMarkdownStyles(position: ChatMessagePosition): MarkdownProps["styl
     },
     heading1: {
       ...baseText,
-      fontSize: 22,
+      fontSize: scaleFont(22),
       fontWeight: "700",
       marginTop: spacing.sm,
       marginBottom: spacing.xs,
     },
     heading2: {
       ...baseText,
-      fontSize: 20,
+      fontSize: scaleFont(20),
       fontWeight: "700",
       marginTop: spacing.sm,
       marginBottom: spacing.xs,
     },
     heading3: {
       ...baseText,
-      fontSize: 18,
+      fontSize: scaleFont(18),
       fontWeight: "600",
       marginTop: spacing.sm,
       marginBottom: spacing.xs,
@@ -129,7 +127,8 @@ const selectableMarkdownRules: MarkdownProps["rules"] = {
 };
 
 function ChatMessageMarkdownComponent({ text, position }: ChatMessageMarkdownProps) {
-  const markdownStyles = useMemo(() => buildMarkdownStyles(position), [position]);
+  const { colors } = useTheme();
+  const markdownStyles = useMemo(() => buildMarkdownStyles(position, colors), [position, colors]);
 
   return (
     <View style={styles.container}>
@@ -144,7 +143,7 @@ export const ChatMessageMarkdown = memo(ChatMessageMarkdownComponent);
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 5,
+    marginVertical: scaleSize(5),
     marginHorizontal: spacing.sm + 2,
     flexShrink: 1,
     maxWidth: "100%",

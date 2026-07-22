@@ -1,10 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   ScrollView,
@@ -15,13 +14,15 @@ import {
   View,
 } from "react-native";
 
+import { useDialog } from "@/components/AppDialog";
 import TagChip from "@/components/TagChip";
 import { ModelDetailsLabels } from "@/constants/models";
-import { colors, radii, spacing, typography } from "@/constants/theme";
+import { radii, spacing, type ThemeColors, typography } from "@/constants/theme";
 import type { ModelsStackScreenProps } from "@/navigation/types";
 import { localFileBasename } from "@/services/downloadHelpers";
 import { HuggingFaceService } from "@/services/HuggingFaceService";
 import { useModelDownloader } from "@/services/useModelDownloader";
+import { useTheme } from "@/theme/ThemeProvider";
 import type { GgufVariant } from "@/types/models";
 import { listLanguageModelGgufVariants } from "@/utils/ggufFileSelection";
 import { formatCount, formatFileSize, formatParameterBillions, parseModelId } from "@/utils/parseModelId";
@@ -30,6 +31,9 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
   const { model: listModel } = route.params;
   const isFocused = useIsFocused();
   const { width } = useWindowDimensions();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const showDialog = useDialog();
   const contentMaxWidth = Math.min(width - spacing.lg * 2, 720);
 
   const {
@@ -84,20 +88,24 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
 
   const handleDelete = useCallback(
     (variant: GgufVariant) => {
-      Alert.alert(ModelDetailsLabels.DELETE_TITLE, ModelDetailsLabels.DELETE_MESSAGE(variant.filename), [
-        { text: ModelDetailsLabels.CANCEL, style: "cancel" },
-        {
-          text: ModelDetailsLabels.DELETE,
-          style: "destructive",
-          onPress: () => {
-            void deleteDownloadedModel(model.id).catch((deleteError: unknown) => {
-              console.error(`Failed to delete downloaded model ${model.id}:`, deleteError);
-            });
+      showDialog({
+        title: ModelDetailsLabels.DELETE_TITLE,
+        message: ModelDetailsLabels.DELETE_MESSAGE(variant.filename),
+        buttons: [
+          { text: ModelDetailsLabels.CANCEL, style: "cancel" },
+          {
+            text: ModelDetailsLabels.DELETE,
+            style: "destructive",
+            onPress: () => {
+              void deleteDownloadedModel(model.id).catch((deleteError: unknown) => {
+                console.error(`Failed to delete downloaded model ${model.id}:`, deleteError);
+              });
+            },
           },
-        },
-      ]);
+        ],
+      });
     },
-    [deleteDownloadedModel, model.id],
+    [deleteDownloadedModel, model.id, showDialog],
   );
 
   const renderVariant = useCallback(
@@ -120,9 +128,7 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
                   {ModelDetailsLabels.DOWNLOADING_FILE(item.filename)} — {Math.round(progress)}%
                 </Text>
                 <View style={styles.variantProgressTrack}>
-                  <View
-                    style={[styles.variantProgressFill, { width: `${Math.min(100, Math.max(0, progress))}%` }]}
-                  />
+                  <View style={[styles.variantProgressFill, { width: `${Math.min(100, Math.max(0, progress))}%` }]} />
                 </View>
               </>
             ) : null}
@@ -133,7 +139,10 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
             </TouchableOpacity>
           ) : (
             <Pressable
-              style={[isDownloaded ? styles.variantDeleteButton : styles.variantButton, !variantsReady && styles.variantButtonDisabled]}
+              style={[
+                isDownloaded ? styles.variantDeleteButton : styles.variantButton,
+                !variantsReady && styles.variantButtonDisabled,
+              ]}
               onPress={() => (isDownloaded ? handleDelete(item) : handleDownload(item))}
               disabled={!variantsReady}
               accessibilityRole="button"
@@ -160,6 +169,7 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
       isVariantDownloaded,
       model.id,
       progress,
+      styles,
       variantsReady,
     ],
   );
@@ -226,157 +236,158 @@ export default function ModelDetails({ route }: ModelsStackScreenProps<"ModelDet
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xxl,
-  },
-  loadingText: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  errorText: {
-    ...typography.body,
-    color: colors.danger,
-    marginBottom: spacing.md,
-  },
-  author: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  title: {
-    ...typography.headline,
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  repoId: {
-    ...typography.caption,
-    color: colors.textTertiary,
-    marginBottom: spacing.lg,
-  },
-  metricsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  metric: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  metricText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  tagsScroll: {
-    marginBottom: spacing.lg,
-  },
-  tagsContent: {
-    paddingRight: spacing.lg,
-  },
-  sectionTitle: {
-    ...typography.headline,
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-  variantsLoading: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-  },
-  emptyText: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  variantRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  variantInfo: {
-    flex: 1,
-    flexShrink: 1,
-  },
-  variantName: {
-    ...typography.body,
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  variantSize: {
-    ...typography.caption,
-    color: colors.primary,
-    fontWeight: "600",
-  },
-  variantDownloadingLabel: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
-  },
-  variantProgressTrack: {
-    height: 4,
-    backgroundColor: colors.progressTrack,
-    borderRadius: radii.pill,
-    overflow: "hidden",
-    marginTop: spacing.xs,
-  },
-  variantProgressFill: {
-    height: "100%",
-    backgroundColor: colors.primary,
-  },
-  variantStopButton: {
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.danger,
-  },
-  variantStopButtonText: {
-    ...typography.caption,
-    color: colors.danger,
-    fontWeight: "600",
-  },
-  variantButton: {
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  variantDeleteButton: {
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.danger,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  variantButtonDisabled: {
-    opacity: 0.6,
-  },
-  variantButtonText: {
-    ...typography.caption,
-    color: colors.surface,
-    fontWeight: "600",
-  },
-  variantDeleteButtonText: {
-    ...typography.caption,
-    color: colors.surface,
-    fontWeight: "600",
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    content: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.xxl,
+    },
+    loadingText: {
+      ...typography.body,
+      color: colors.textSecondary,
+    },
+    errorText: {
+      ...typography.body,
+      color: colors.danger,
+      marginBottom: spacing.md,
+    },
+    author: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      marginBottom: spacing.xs,
+    },
+    title: {
+      ...typography.headline,
+      color: colors.text,
+      marginBottom: spacing.xs,
+    },
+    repoId: {
+      ...typography.caption,
+      color: colors.textTertiary,
+      marginBottom: spacing.lg,
+    },
+    metricsRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: spacing.md,
+      marginBottom: spacing.md,
+    },
+    metric: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.xs,
+    },
+    metricText: {
+      ...typography.caption,
+      color: colors.textSecondary,
+    },
+    tagsScroll: {
+      marginBottom: spacing.lg,
+    },
+    tagsContent: {
+      paddingRight: spacing.lg,
+    },
+    sectionTitle: {
+      ...typography.headline,
+      color: colors.text,
+      marginBottom: spacing.md,
+    },
+    variantsLoading: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+      paddingVertical: spacing.md,
+    },
+    emptyText: {
+      ...typography.body,
+      color: colors.textSecondary,
+    },
+    variantRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    variantInfo: {
+      flex: 1,
+      flexShrink: 1,
+    },
+    variantName: {
+      ...typography.body,
+      color: colors.text,
+      marginBottom: spacing.xs,
+    },
+    variantSize: {
+      ...typography.caption,
+      color: colors.primary,
+      fontWeight: "600",
+    },
+    variantDownloadingLabel: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      marginTop: spacing.xs,
+    },
+    variantProgressTrack: {
+      height: 4,
+      backgroundColor: colors.progressTrack,
+      borderRadius: radii.pill,
+      overflow: "hidden",
+      marginTop: spacing.xs,
+    },
+    variantProgressFill: {
+      height: "100%",
+      backgroundColor: colors.primary,
+    },
+    variantStopButton: {
+      minHeight: 44,
+      paddingHorizontal: spacing.md,
+      borderRadius: radii.md,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: colors.danger,
+    },
+    variantStopButtonText: {
+      ...typography.caption,
+      color: colors.danger,
+      fontWeight: "600",
+    },
+    variantButton: {
+      minHeight: 44,
+      paddingHorizontal: spacing.md,
+      borderRadius: radii.md,
+      backgroundColor: colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    variantDeleteButton: {
+      minHeight: 44,
+      paddingHorizontal: spacing.md,
+      borderRadius: radii.md,
+      backgroundColor: colors.danger,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    variantButtonDisabled: {
+      opacity: 0.6,
+    },
+    variantButtonText: {
+      ...typography.caption,
+      color: colors.userBubbleText,
+      fontWeight: "600",
+    },
+    variantDeleteButtonText: {
+      ...typography.caption,
+      color: colors.background,
+      fontWeight: "600",
+    },
+    separator: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: colors.border,
+    },
+  });

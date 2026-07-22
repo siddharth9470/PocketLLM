@@ -9,7 +9,8 @@ import {
   type SortField,
   type SortOption,
 } from "@/constants/modelFilters";
-import { colors, radii, spacing, typography } from "@/constants/theme";
+import { radii, spacing, type ThemeColors, typography } from "@/constants/theme";
+import { useTheme } from "@/theme/ThemeProvider";
 
 const CHIP_GRID = {
   MIN_CHIP_WIDTH: 108,
@@ -38,18 +39,23 @@ interface FilterChipItemProps {
   onPress: () => void;
 }
 
-const FilterChipItem = memo(({ label, isActive, onPress }: FilterChipItemProps) => (
-  <Pressable
-    style={[styles.chip, isActive && styles.chipActive]}
-    onPress={onPress}
-    accessibilityRole="button"
-    accessibilityState={{ selected: isActive }}
-  >
-    <Text style={[styles.chipText, isActive && styles.chipTextActive]} numberOfLines={1} ellipsizeMode="tail">
-      {label}
-    </Text>
-  </Pressable>
-));
+const FilterChipItem = memo(({ label, isActive, onPress }: FilterChipItemProps) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  return (
+    <Pressable
+      style={[styles.chip, isActive && styles.chipActive]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: isActive }}
+    >
+      <Text style={[styles.chipText, isActive && styles.chipTextActive]} numberOfLines={1} ellipsizeMode="tail">
+        {label}
+      </Text>
+    </Pressable>
+  );
+});
 
 interface SortOptionItemProps {
   isActive: boolean;
@@ -57,17 +63,22 @@ interface SortOptionItemProps {
   onPress: () => void;
 }
 
-const SortOptionItem = memo(({ isActive, label, onPress }: SortOptionItemProps) => (
-  <Pressable
-    style={[styles.sortButton, isActive && styles.sortButtonActive]}
-    onPress={onPress}
-    accessibilityRole="button"
-    accessibilityState={{ selected: isActive }}
-  >
-    <Text style={[styles.sortButtonText, isActive && styles.sortButtonTextActive]}>{label}</Text>
-    {isActive && <Text style={styles.sortDirection}>{ModelFilterSortLabels.SORT_DIRECTION}</Text>}
-  </Pressable>
-));
+const SortOptionItem = memo(({ isActive, label, onPress }: SortOptionItemProps) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  return (
+    <Pressable
+      style={[styles.sortButton, isActive && styles.sortButtonActive]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: isActive }}
+    >
+      <Text style={[styles.sortButtonText, isActive && styles.sortButtonTextActive]}>{label}</Text>
+      {isActive && <Text style={styles.sortDirection}>{ModelFilterSortLabels.SORT_DIRECTION}</Text>}
+    </Pressable>
+  );
+});
 
 export default function ModelFilterSortSheet({
   sortBy,
@@ -82,6 +93,8 @@ export default function ModelFilterSortSheet({
   onTogglePipelineTag,
   onToggleDownloadedOnly,
 }: ModelFilterSortSheetProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [visible, setVisible] = useState(false);
   const { width: windowWidth } = useWindowDimensions();
 
@@ -130,7 +143,7 @@ export default function ModelFilterSortSheet({
         onPress={() => setVisible(true)}
         accessibilityRole="button"
       >
-        <Ionicons name="options-outline" size={18} color={hasActiveFilters ? colors.surface : colors.primary} />
+        <Ionicons name="options-outline" size={18} color={hasActiveFilters ? colors.userBubbleText : colors.primary} />
         <Text style={[styles.triggerText, hasActiveFilters && styles.triggerTextActive]}>
           {ModelFilterSortLabels.TRIGGER_BUTTON}
         </Text>
@@ -217,160 +230,160 @@ export default function ModelFilterSortSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  trigger: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    alignSelf: "flex-start",
-    backgroundColor: colors.surface,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  triggerActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  triggerText: {
-    ...typography.chip,
-    color: colors.primary,
-    fontWeight: "600",
-  },
-  triggerTextActive: {
-    color: colors.surface,
-  },
-  activeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.35)",
-    justifyContent: "flex-end",
-  },
-  backdropPressable: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radii.lg,
-    borderTopRightRadius: radii.lg,
-    maxHeight: "65%",
-    overflow: "hidden",
-  },
-  sheetHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  sheetTitle: {
-    ...typography.headline,
-    color: colors.text,
-  },
-  sheetBody: {
-    flexShrink: 1,
-  },
-  sheetContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
-    gap: spacing.lg,
-  },
-  section: {
-    gap: spacing.sm,
-  },
-  sectionLabel: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  sortRow: {
-    gap: spacing.sm,
-  },
-  sortButton: {
-    flex: 1,
-    backgroundColor: colors.chipBackground,
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  sortButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  sortButtonText: {
-    ...typography.chip,
-    color: colors.chipText,
-    fontWeight: "600",
-  },
-  sortButtonTextActive: {
-    color: colors.surface,
-  },
-  sortDirection: {
-    ...typography.caption,
-    color: colors.surface,
-    marginTop: spacing.xs,
-    opacity: 0.9,
-  },
-  chipRow: {
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  chip: {
-    flex: 1,
-    alignItems: "center",
-    backgroundColor: colors.chipBackground,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  chipText: {
-    ...typography.chip,
-    color: colors.chipText,
-    textAlign: "center",
-  },
-  chipTextActive: {
-    color: colors.surface,
-    fontWeight: "600",
-  },
-  sheetFooter: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  doneButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-  },
-  doneButtonText: {
-    ...typography.headline,
-    fontSize: 15,
-    color: colors.surface,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    trigger: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+      alignSelf: "flex-start",
+      backgroundColor: colors.surface,
+      borderRadius: radii.pill,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      marginHorizontal: spacing.lg,
+      marginTop: spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    triggerActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    triggerText: {
+      ...typography.chip,
+      color: colors.primary,
+      fontWeight: "600",
+    },
+    triggerTextActive: {
+      color: colors.userBubbleText,
+    },
+    activeDot: {
+      width: 6,
+      height: 6,
+      borderRadius: radii.pill,
+      backgroundColor: colors.userBubbleText,
+    },
+    backdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "flex-end",
+    },
+    backdropPressable: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    sheet: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: radii.lg,
+      borderTopRightRadius: radii.lg,
+      maxHeight: "65%",
+      overflow: "hidden",
+    },
+    sheetHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    sheetTitle: {
+      ...typography.headline,
+      color: colors.text,
+    },
+    sheetBody: {
+      flexShrink: 1,
+    },
+    sheetContent: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.md,
+      gap: spacing.lg,
+    },
+    section: {
+      gap: spacing.sm,
+    },
+    sectionLabel: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      fontWeight: "600",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    sortRow: {
+      gap: spacing.sm,
+    },
+    sortButton: {
+      flex: 1,
+      backgroundColor: colors.chipBackground,
+      borderRadius: radii.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    sortButtonActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    sortButtonText: {
+      ...typography.chip,
+      color: colors.chipText,
+      fontWeight: "600",
+    },
+    sortButtonTextActive: {
+      color: colors.userBubbleText,
+    },
+    sortDirection: {
+      ...typography.caption,
+      color: colors.userBubbleText,
+      marginTop: spacing.xs,
+      opacity: 0.9,
+    },
+    chipRow: {
+      gap: spacing.sm,
+      marginBottom: spacing.sm,
+    },
+    chip: {
+      flex: 1,
+      alignItems: "center",
+      backgroundColor: colors.chipBackground,
+      borderRadius: radii.pill,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    chipActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    chipText: {
+      ...typography.chip,
+      color: colors.chipText,
+      textAlign: "center",
+    },
+    chipTextActive: {
+      color: colors.userBubbleText,
+      fontWeight: "600",
+    },
+    sheetFooter: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.lg,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+    },
+    doneButton: {
+      backgroundColor: colors.primary,
+      borderRadius: radii.sm,
+      paddingVertical: spacing.md,
+      alignItems: "center",
+    },
+    doneButtonText: {
+      ...typography.headline,
+      color: colors.userBubbleText,
+    },
+  });
