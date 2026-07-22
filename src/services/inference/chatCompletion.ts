@@ -14,7 +14,7 @@ import {
 } from "@/services/inference/toolCallParsing";
 import { searchWeb, type WebSearchResult } from "@/services/tavilySearch";
 
-const STOP_WORDS = [
+const COMPLETION_STOP_WORDS = [
   "</s>",
   "<|end|>",
   "<|eot_id|>",
@@ -29,12 +29,21 @@ const STOP_WORDS = [
 const MAX_SEARCH_CONTEXT_CHARS = 3000;
 const LOG_PREFIX = "[chatCompletion]";
 
-type CompletionMessage = {
+/** Callback invoked with the accumulated assistant text on each streamed chunk. */
+type StreamTokenHandler = (accumulatedContent: string) => void;
+
+type ChatCompletionMessage = {
   role: string;
   content?: string;
 };
 
-type CompletionMode = "tools" | "answer" | "chat";
+/**
+ * Which llama.rn completion is being run:
+ * - `toolSelection`: pass 1, model may emit a `web_search` tool call
+ * - `groundedAnswer`: pass 2, model answers from injected search results
+ * - `directChat`: single-pass reply with no tools
+ */
+type CompletionPurpose = "toolSelection" | "groundedAnswer" | "directChat";
 
 export interface ChatCompletionResult {
   text: string;
@@ -51,15 +60,15 @@ export interface ChatCompletionOptions {
 }
 
 /**
- * Entry point for generating an assistant reply.
+ * Generates an assistant reply for a user prompt.
  *
- * When Tavily is configured, pass 1 lets the model decide whether to call
- * `web_search`. If it does, Tavily runs and pass 2 streams the final answer.
- * Otherwise a single on-device completion is returned (streamed when possible).
+ * With Tavily configured the model first decides whether to call `web_search`;
+ * if it does, Tavily runs and a second pass streams a grounded answer. Without
+ * Tavily, a single on-device completion is streamed directly.
  */
 export async function chatCompletion(
   prompt: string,
-  onToken?: (accumulatedText: string) => void,
+  onToken?: StreamTokenHandler,
   options?: ChatCompletionOptions,
 ): Promise<ChatCompletionResult> {
   const userPrompt = prompt.trim();
@@ -67,136 +76,151 @@ export async function chatCompletion(
     throw new Error("Prompt is empty");
   }
 
+  const webSearchEnabled = isTavilyConfigured();
   console.log(`${LOG_PREFIX} Prompt:`, userPrompt);
-  console.log(`${LOG_PREFIX} Tool calling enabled:`, isTavilyConfigured());
+  console.log(`${LOG_PREFIX} Tool calling enabled:`, webSearchEnabled);
 
-  if (isTavilyConfigured()) {
-    return runToolCallingCompletion(userPrompt, onToken, options);
+  if (webSearchEnabled) {
+    return generateReplyWithToolCalling(userPrompt, onToken, options);
   }
 
-  return runDirectCompletion(userPrompt, onToken);
+  return generateDirectReply(userPrompt, onToken);
 }
 
 /**
- * Pass 1 with tools (no streaming) → optional Tavily search → pass 2 streams answer.
+ * Runs the tool-selection pass, then either performs a web search or returns
+ * the model's direct answer.
  */
-async function runToolCallingCompletion(
+async function generateReplyWithToolCalling(
   userPrompt: string,
-  onToken?: (accumulatedText: string) => void,
+  onToken?: StreamTokenHandler,
   options?: ChatCompletionOptions,
 ): Promise<ChatCompletionResult> {
   console.log(`${LOG_PREFIX} Pass 1: checking if model calls web_search (no streaming)`);
 
-  const pass1Result = await complete(buildInitialMessages(userPrompt), "tools");
-  const toolCall = resolveWebSearchToolCall(pass1Result, userPrompt);
+  const toolSelectionResponse = await runModelCompletion(
+    buildConversationMessages(userPrompt),
+    "toolSelection",
+  );
+  const webSearchRequest = resolveWebSearchToolCall(toolSelectionResponse, userPrompt);
 
-  if (toolCall) {
-    return answerWithWebSearch(userPrompt, toolCall, onToken, options);
+  if (webSearchRequest) {
+    return generateGroundedReply(userPrompt, webSearchRequest, onToken, options);
   }
 
-  const text = extractAssistantText(pass1Result);
-  console.log(`${LOG_PREFIX} No tool call — direct answer:`, text);
+  const assistantMessageContent = readAssistantContent(toolSelectionResponse);
+  console.log(`${LOG_PREFIX} No tool call — direct answer:`, assistantMessageContent);
 
-  emitToken(onToken, text);
-  return toChatResult(text, pass1Result);
+  streamToken(onToken, assistantMessageContent);
+  return buildChatCompletionResult(assistantMessageContent, toolSelectionResponse);
 }
 
 /**
- * Single-pass chat when Tavily is not configured. Tokens stream via `onToken`.
+ * Single-pass reply when web search is unavailable. Tokens stream via `onToken`.
  */
-async function runDirectCompletion(
+async function generateDirectReply(
   userPrompt: string,
-  onToken?: (accumulatedText: string) => void,
+  onToken?: StreamTokenHandler,
 ): Promise<ChatCompletionResult> {
   console.log(`${LOG_PREFIX} Streaming direct answer (no tools configured)`);
 
-  const result = await complete(buildInitialMessages(userPrompt), "chat", onToken);
-  const text = extractAssistantText(result);
+  const directChatResponse = await runModelCompletion(
+    buildConversationMessages(userPrompt),
+    "directChat",
+    onToken,
+  );
+  const assistantMessageContent = readAssistantContent(directChatResponse);
 
-  console.log(`${LOG_PREFIX} Response:`, text);
-  return toChatResult(text, result);
+  console.log(`${LOG_PREFIX} Response:`, assistantMessageContent);
+  return buildChatCompletionResult(assistantMessageContent, directChatResponse);
 }
 
 /**
- * Runs Tavily, then streams a second llama.rn pass grounded in search results.
- * Falls back to Tavily text if pass 2 fails.
+ * Executes the web search requested by the model and streams a grounded answer.
+ * Falls back to Tavily's own text if the second completion fails.
  */
-async function answerWithWebSearch(
+async function generateGroundedReply(
   userPrompt: string,
-  toolCall: WebSearchToolCall,
-  onToken?: (accumulatedText: string) => void,
+  webSearchRequest: WebSearchToolCall,
+  onToken?: StreamTokenHandler,
   options?: ChatCompletionOptions,
 ): Promise<ChatCompletionResult> {
   options?.onSearching?.();
 
-  const searchQuery = userPrompt || toolCall.query;
+  const searchQuery = userPrompt || webSearchRequest.query;
   console.log(`${LOG_PREFIX} Model requested web_search:`, searchQuery);
 
   const searchResult = await searchWeb(searchQuery);
   assertSearchHasResults(searchResult);
 
-  const searchContext = compactSearchContext(searchResult);
+  const groundedSearchContext = buildSearchContext(searchResult);
   console.log(`${LOG_PREFIX} Streaming final answer from llama.rn (pass 2)`);
 
   try {
-    const pass2Result = await complete(
-      buildSearchGroundedMessages(userPrompt, searchContext),
-      "answer",
-      (accumulatedText) => emitToken(onToken, accumulatedText, { skipToolCallText: true }),
+    const groundedAnswerResponse = await runModelCompletion(
+      buildSearchGroundedMessages(userPrompt, groundedSearchContext),
+      "groundedAnswer",
+      (accumulatedContent) => streamToken(onToken, accumulatedContent, { skipToolCallText: true }),
     );
 
-    const text = sanitizeAssistantText(extractAssistantText(pass2Result), searchContext);
-    console.log(`${LOG_PREFIX} Final answer:`, text);
-    return toChatResult(text, pass2Result);
+    const assistantMessageContent = replaceLeakedToolCall(
+      readAssistantContent(groundedAnswerResponse),
+      groundedSearchContext,
+    );
+    console.log(`${LOG_PREFIX} Final answer:`, assistantMessageContent);
+    return buildChatCompletionResult(assistantMessageContent, groundedAnswerResponse);
   } catch (error) {
     console.error(`${LOG_PREFIX} Pass 2 failed, falling back to Tavily answer:`, error);
 
-    const fallbackText = searchResult.answer ?? searchResult.formatted.slice(0, MAX_SEARCH_CONTEXT_CHARS);
-    emitToken(onToken, fallbackText);
-    return { text: fallbackText };
+    const fallbackAnswer =
+      searchResult.answer ?? searchResult.formatted.slice(0, MAX_SEARCH_CONTEXT_CHARS);
+    streamToken(onToken, fallbackAnswer);
+    return { text: fallbackAnswer };
   }
 }
 
 /**
- * Invokes llama.rn `context.completion`. Each callback receives accumulated `data.content`.
+ * Invokes llama.rn `context.completion`, forwarding each accumulated content
+ * chunk to `onToken` when provided.
  */
-async function complete(
-  messages: CompletionMessage[],
-  mode: CompletionMode,
-  onToken?: (accumulatedText: string) => void,
+async function runModelCompletion(
+  messages: ChatCompletionMessage[],
+  purpose: CompletionPurpose,
+  onToken?: StreamTokenHandler,
 ): Promise<NativeCompletionResult> {
   const context = getActiveContext();
   if (!context) {
     throw new Error("No context found");
   }
 
-  return context.completion(buildCompletionParams(messages, mode), (data) => {
-    const chunk = data.content ?? "";
-    if (chunk.length > 0) {
-      onToken?.(chunk);
+  return context.completion(buildCompletionParams(messages, purpose), (data) => {
+    const accumulatedContent = data.content ?? "";
+    if (accumulatedContent.length > 0) {
+      onToken?.(accumulatedContent);
     }
   });
 }
 
-/**
- * Builds llama.rn completion params for the given conversation mode.
- */
-function buildCompletionParams(messages: CompletionMessage[], mode: CompletionMode): CompletionParams {
+/** Builds llama.rn completion params tuned for the given completion purpose. */
+function buildCompletionParams(
+  messages: ChatCompletionMessage[],
+  purpose: CompletionPurpose,
+): CompletionParams {
   return {
     messages: toNativeMessages(messages),
     n_predict: 512,
     reasoning_format: "auto",
     thinking_budget_tokens: 96,
     enable_thinking: false,
-    stop: STOP_WORDS,
+    stop: COMPLETION_STOP_WORDS,
     jinja: true,
-    ...(mode === "tools" ? { tools: WEB_SEARCH_TOOL, tool_choice: "auto" } : {}),
-    ...(mode === "answer" ? { force_pure_content: true } : {}),
+    ...(purpose === "toolSelection" ? { tools: WEB_SEARCH_TOOL, tool_choice: "auto" } : {}),
+    ...(purpose === "groundedAnswer" ? { force_pure_content: true } : {}),
   };
 }
 
-/** System + user messages for the first pass / direct chat. */
-function buildInitialMessages(userPrompt: string): CompletionMessage[] {
+/** System + user messages for the tool-selection pass or a direct chat reply. */
+function buildConversationMessages(userPrompt: string): ChatCompletionMessage[] {
   return [
     { role: "system", content: CHAT_SYSTEM_PROMPT },
     { role: "user", content: userPrompt },
@@ -204,23 +228,24 @@ function buildInitialMessages(userPrompt: string): CompletionMessage[] {
 }
 
 /**
- * System + user messages for pass 2 after Tavily returns.
- * Uses embedded results (not OAI `tool` role) for broad model compatibility.
+ * Messages for the grounded-answer pass. Search results are embedded in the user
+ * turn (not an OAI `tool` role) for broad on-device model compatibility.
  */
-function buildSearchGroundedMessages(userPrompt: string, searchContext: string): CompletionMessage[] {
+function buildSearchGroundedMessages(
+  userPrompt: string,
+  groundedSearchContext: string,
+): ChatCompletionMessage[] {
   return [
     { role: "system", content: CHAT_ANSWER_WITH_SEARCH_PROMPT },
     {
       role: "user",
-      content: `Question: ${userPrompt}\n\nWeb search results:\n${searchContext}\n\nAnswer the question using the search results above.`,
+      content: `Question: ${userPrompt}\n\nWeb search results:\n${groundedSearchContext}\n\nAnswer the question using the search results above.`,
     },
   ];
 }
 
-/**
- * Prefers Tavily's concise answer for the LLM context; otherwise truncates raw snippets.
- */
-function compactSearchContext(searchResult: WebSearchResult): string {
+/** Prefers Tavily's concise answer as model context; otherwise truncates raw snippets. */
+function buildSearchContext(searchResult: WebSearchResult): string {
   if (searchResult.answer?.trim()) {
     return `Answer: ${searchResult.answer.trim()}`;
   }
@@ -228,7 +253,7 @@ function compactSearchContext(searchResult: WebSearchResult): string {
   return searchResult.formatted.slice(0, MAX_SEARCH_CONTEXT_CHARS);
 }
 
-/** Throws when Tavily returns nothing usable. */
+/** Throws when Tavily returns neither an answer nor any results. */
 function assertSearchHasResults(searchResult: WebSearchResult): void {
   if (searchResult.resultCount === 0 && !searchResult.answer) {
     console.error(`${LOG_PREFIX} Tavily returned no results`);
@@ -236,48 +261,47 @@ function assertSearchHasResults(searchResult: WebSearchResult): void {
   }
 }
 
-/**
- * Returns display-safe assistant text from a llama.rn result (`content`, else `text`).
- */
-function extractAssistantText(result: NativeCompletionResult): string {
-  return result.content?.trim() || result.text?.trim() || "";
+/** Returns display-safe assistant text from a llama.rn result (`content`, else `text`). */
+function readAssistantContent(response: NativeCompletionResult): string {
+  return response.content?.trim() || response.text?.trim() || "";
 }
 
-/**
- * Replaces raw tool-call output with search context when the model re-emits tool syntax.
- */
-function sanitizeAssistantText(text: string, searchFallback: string): string {
-  return looksLikeTextToolCall(text) ? searchFallback : text;
+/** Substitutes the search context when the model leaks raw tool-call syntax into its reply. */
+function replaceLeakedToolCall(assistantMessageContent: string, searchContextFallback: string): string {
+  return looksLikeTextToolCall(assistantMessageContent) ? searchContextFallback : assistantMessageContent;
 }
 
-/** Forwards accumulated text to the UI callback, optionally ignoring tool-call strings. */
-function emitToken(
-  onToken: ((accumulatedText: string) => void) | undefined,
-  text: string,
+/** Forwards accumulated content to the UI callback, optionally suppressing tool-call syntax. */
+function streamToken(
+  onToken: StreamTokenHandler | undefined,
+  accumulatedContent: string,
   options?: { skipToolCallText?: boolean },
 ): void {
-  if (!onToken || text.length === 0) {
+  if (!onToken || accumulatedContent.length === 0) {
     return;
   }
 
-  if (options?.skipToolCallText && looksLikeTextToolCall(text)) {
+  if (options?.skipToolCallText && looksLikeTextToolCall(accumulatedContent)) {
     return;
   }
 
-  onToken(text);
+  onToken(accumulatedContent);
 }
 
 /** Maps a llama.rn result into the public chat completion shape. */
-function toChatResult(text: string, result: NativeCompletionResult): ChatCompletionResult {
+function buildChatCompletionResult(
+  assistantMessageContent: string,
+  response: NativeCompletionResult,
+): ChatCompletionResult {
   return {
-    text,
-    metrics: mapCompletionMetrics(result),
+    text: assistantMessageContent,
+    metrics: mapCompletionMetrics(response),
   };
 }
 
 /** Converts llama.rn timing stats into chat metrics. */
-function mapCompletionMetrics(result: NativeCompletionResult): ChatCompletionResult["metrics"] {
-  const { timings } = result;
+function mapCompletionMetrics(response: NativeCompletionResult): ChatCompletionResult["metrics"] {
+  const { timings } = response;
   if (!timings) {
     return undefined;
   }
@@ -291,6 +315,6 @@ function mapCompletionMetrics(result: NativeCompletionResult): ChatCompletionRes
 }
 
 /** Casts app messages to the llama.rn OAI-compatible shape. */
-function toNativeMessages(messages: CompletionMessage[]): RNLlamaOAICompatibleMessage[] {
+function toNativeMessages(messages: ChatCompletionMessage[]): RNLlamaOAICompatibleMessage[] {
   return messages as RNLlamaOAICompatibleMessage[];
 }
