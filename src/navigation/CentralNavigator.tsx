@@ -4,6 +4,7 @@ import type { RouteProp } from "@react-navigation/native";
 import { createNativeStackNavigator, type NativeStackNavigationOptions } from "@react-navigation/native-stack";
 import { useCallback, useMemo } from "react";
 
+import AppHeader from "@/components/AppHeader";
 import type { ThemeColors } from "@/constants/theme";
 import type {
   ChatsStackParamList,
@@ -21,7 +22,6 @@ import ModelsScreen from "@/screens/models/ModelsScreen";
 import DeviceInfoScreen from "@/screens/settings/DeviceInfo";
 import SettingsScreen from "@/screens/settings/SettingsScreen";
 import { useTheme } from "@/theme/ThemeProvider";
-import { scaleFont } from "@/utils/scaling";
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -35,13 +35,11 @@ const TAB_ICONS: Record<keyof MainTabParamList, keyof typeof Ionicons.glyphMap> 
   SettingsTab: "settings-outline",
 };
 
-/** Flat, themed header shared by every native stack. Blurred screens are frozen to avoid wasted renders. */
+/** Themed custom header shared by every native stack. Blurred screens are frozen to avoid wasted renders. */
 function buildStackScreenOptions(colors: ThemeColors): NativeStackNavigationOptions {
   return {
+    header: (props) => <AppHeader {...props} />,
     headerShadowVisible: false,
-    headerStyle: { backgroundColor: colors.surface },
-    headerTintColor: colors.text,
-    headerTitleStyle: { color: colors.text, fontSize: scaleFont(17), fontWeight: "600" },
     contentStyle: { backgroundColor: colors.background },
     freezeOnBlur: true,
   };
