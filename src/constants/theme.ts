@@ -154,10 +154,61 @@ export const radii = {
   pill: 999,
 } as const;
 
+export type FontName = "timesNewRoman" | "comfortaa";
+
+const fontFamilies: Record<FontName, string> = {
+  timesNewRoman: "TimesNewRoman",
+  comfortaa: "Comfortaa",
+};
+
+export interface FontOption {
+  name: FontName;
+  label: string;
+  fontFamily: string;
+}
+
+export const FONT_OPTIONS: FontOption[] = [
+  { name: "timesNewRoman", label: "Times New Roman", fontFamily: fontFamilies.timesNewRoman },
+  { name: "comfortaa", label: "Comfortaa", fontFamily: fontFamilies.comfortaa },
+];
+
+export const DEFAULT_FONT_NAME: FontName = "comfortaa";
+
+export function fontFamilyForName(name: FontName): string {
+  return fontFamilies[name];
+}
+
+/**
+ * Module-level active font family, applied to every {@link typography} token.
+ * The theme provider updates it synchronously on selection so style factories
+ * rebuilt on the following render pick up the new family app-wide.
+ */
+let activeFontFamily: string = fontFamilyForName(DEFAULT_FONT_NAME);
+
+export function setActiveFontFamily(fontFamily: string): void {
+  activeFontFamily = fontFamily;
+}
+
+export interface TypographyToken {
+  fontSize: number;
+  fontWeight: "400" | "500" | "600" | "700";
+  fontFamily?: string;
+}
+
 export const typography = {
-  title: { fontSize: scaleFont(28), fontWeight: "700" as const },
-  headline: { fontSize: scaleFont(17), fontWeight: "600" as const },
-  body: { fontSize: scaleFont(16), fontWeight: "400" as const },
-  caption: { fontSize: scaleFont(13), fontWeight: "400" as const },
-  chip: { fontSize: scaleFont(12), fontWeight: "500" as const },
-} as const;
+  get title(): TypographyToken {
+    return { fontSize: scaleFont(28), fontWeight: "700", fontFamily: activeFontFamily };
+  },
+  get headline(): TypographyToken {
+    return { fontSize: scaleFont(17), fontWeight: "600", fontFamily: activeFontFamily };
+  },
+  get body(): TypographyToken {
+    return { fontSize: scaleFont(16), fontWeight: "400", fontFamily: activeFontFamily };
+  },
+  get caption(): TypographyToken {
+    return { fontSize: scaleFont(13), fontWeight: "400", fontFamily: activeFontFamily };
+  },
+  get chip(): TypographyToken {
+    return { fontSize: scaleFont(12), fontWeight: "500", fontFamily: activeFontFamily };
+  },
+};

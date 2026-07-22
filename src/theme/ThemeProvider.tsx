@@ -19,7 +19,7 @@ interface ThemeContextValue {
   themeName: ThemeName;
   colors: ThemeColors;
   fontName: FontName;
-  fontFamily: string | undefined;
+  fontFamily: string;
   setTheme: (name: ThemeName) => void;
   setFont: (name: FontName) => void;
 }
@@ -38,7 +38,7 @@ function isThemeName(value: string | null): value is ThemeName {
 }
 
 function isFontName(value: string | null): value is FontName {
-  return value === "system" || value === "timesNewRoman" || value === "comfortaa";
+  return value === "timesNewRoman" || value === "comfortaa";
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
