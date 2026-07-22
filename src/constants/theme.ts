@@ -1,6 +1,6 @@
 import { scaleFont, scaleSize } from "@/utils/scaling";
 
-export type ThemeName = "slateIndigo" | "graphiteEmerald";
+export type ThemeName = "slateIndigo" | "graphiteEmerald" | "monokaiAmber";
 
 /** Canonical color token contract shared by every theme palette. */
 export interface ThemeColors {
@@ -69,7 +69,33 @@ const graphiteEmerald: ThemeColors = {
   shadow: "rgba(0, 0, 0, 0.55)",
 };
 
-export const themes: Record<ThemeName, ThemeColors> = { slateIndigo, graphiteEmerald };
+const monokaiAmber: ThemeColors = {
+  background: "#2D2A2E",
+  surface: "#403E41",
+  primary: "#FFD866",
+  primaryPressed: "#E0B84D",
+  text: "#FCFCFA",
+  textSecondary: "#A59FA0",
+  textTertiary: "#727072",
+  border: "#5B595C",
+  chipBackground: "#5B595C",
+  chipText: "#FCFCFA",
+  userBubble: "#FFD866",
+  assistantBubble: "#5B595C",
+  assistantText: "#FCFCFA",
+  userBubbleText: "#2D2A2E",
+  danger: "#FF6188",
+  tabInactive: "#727072",
+  tabActive: "#FFD866",
+  progressTrack: "#5B595C",
+  shadow: "rgba(0, 0, 0, 0.5)",
+};
+
+export const themes: Record<ThemeName, ThemeColors> = {
+  slateIndigo,
+  graphiteEmerald,
+  monokaiAmber,
+};
 
 export const DEFAULT_THEME_NAME: ThemeName = "slateIndigo";
 
@@ -98,6 +124,16 @@ export const THEME_OPTIONS: ThemeOption[] = [
       background: graphiteEmerald.background,
       surface: graphiteEmerald.surface,
       accent: graphiteEmerald.primary,
+    },
+  },
+  {
+    name: "monokaiAmber",
+    label: "Monokai Pro & Vibrant Amber",
+    description: "Monokai charcoal surfaces with warm vibrant amber accents.",
+    swatch: {
+      background: monokaiAmber.background,
+      surface: monokaiAmber.surface,
+      accent: monokaiAmber.primary,
     },
   },
 ];
