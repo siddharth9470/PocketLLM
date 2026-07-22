@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 
 import type { UseQueryResult } from "@tanstack/react-query";
+import type { NativeCompletionResult } from "llama.rn";
 
 import { ChatScreenLabels } from "@/constants/chat";
 import type { Conversation } from "@/types/chat";
@@ -18,9 +19,7 @@ export type MockChatStore = {
   refreshConversations: jest.MockedFunction<() => Promise<void>>;
   loadConversation: jest.MockedFunction<(conversationId: string) => Promise<Conversation | null>>;
   getConversation: jest.MockedFunction<(conversationId: string) => Conversation | undefined>;
-  sendMessage: jest.MockedFunction<
-    (conversationId: string, content: string, options: unknown) => Promise<void>
-  >;
+  sendMessage: jest.MockedFunction<(conversationId: string, content: string, options: unknown) => Promise<void>>;
   setConversationModel: jest.MockedFunction<(conversationId: string, modelId: string) => Promise<void>>;
   setActiveConversationId: jest.MockedFunction<(conversationId: string | null) => void>;
   createConversationId: jest.MockedFunction<() => string>;
@@ -129,6 +128,35 @@ export function buildHuggingFaceModelsQuery(
 }
 
 export const mockExecute = jest.fn().mockResolvedValue({ rows: [], rowsAffected: 1 });
+
+/**
+ * Builds a llama.rn `NativeCompletionResult` for inference tests.
+ *
+ * The native bridge shape declares many required fields the app never reads. We
+ * populate only the fields production code touches (`text`, `content`,
+ * `tool_calls`, `timings`) and isolate the single native-boundary cast here so
+ * individual tests stay concise.
+ */
+export function buildCompletionResult(overrides: Partial<NativeCompletionResult> = {}): NativeCompletionResult {
+  return {
+    text: "",
+    content: "",
+    reasoning_content: "",
+    tool_calls: [],
+    timings: {
+      cache_n: 0,
+      prompt_n: 12,
+      prompt_ms: 100,
+      prompt_per_token_ms: 0,
+      prompt_per_second: 0,
+      predicted_n: 24,
+      predicted_ms: 200,
+      predicted_per_token_ms: 0,
+      predicted_per_second: 42,
+    },
+    ...overrides,
+  } as NativeCompletionResult;
+}
 
 export const MOCK_HF_MODELS: HuggingFaceModel[] = [
   {

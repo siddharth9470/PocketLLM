@@ -30,10 +30,13 @@ jest.mock("@/services/chatHelper", () => ({
   resolveDownloadedModelPath: jest.fn(),
   chatCompletion: jest.fn(),
 }));
-jest.mock("@/utils/chatIds", () => ({
-  generateChatId: jest.fn(() => `chat-id-${Date.now()}`),
-  deriveConversationTitle: (prompt: string) => prompt.trim().slice(0, 50),
-}));
+jest.mock("@/utils/chatIds", () => {
+  let chatIdCounter = 0;
+  return {
+    generateChatId: jest.fn(() => `chat-id-${(chatIdCounter += 1)}`),
+    deriveConversationTitle: (prompt: string) => prompt.trim().slice(0, 50),
+  };
+});
 jest.mock("@react-navigation/native", () => {
   const React = require("react");
   return {
