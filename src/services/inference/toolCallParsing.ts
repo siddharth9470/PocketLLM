@@ -48,6 +48,30 @@ export function looksLikeTextToolCall(text: string): boolean {
   return lowerText.includes(WEB_SEARCH_TOOL_NAME) && (lowerText.includes("tool_call") || lowerText.includes("call:"));
 }
 
+/**
+ * Removes raw inline tool-call syntax from model output so it never reaches the chat UI.
+ * Handles complete blocks and in-progress streaming fragments (e.g. `<tool_call><function=web`).
+ */
+export function stripToolCallTags(raw: string): string {
+  if (!raw) {
+    return "";
+  }
+
+  let result = raw;
+  let removedToolSyntax = false;
+  const markers = ["<|tool_call|>", "<tool_call>", "<function=web", "call:web_search"] as const;
+
+  for (const marker of markers) {
+    const index = result.toLowerCase().indexOf(marker);
+    if (index !== -1) {
+      result = result.slice(0, index);
+      removedToolSyntax = true;
+    }
+  }
+
+  return removedToolSyntax ? result.trimEnd() : result;
+}
+
 /** Combines the `content` and `text` channels of a completion result. */
 function joinResultText(result: NativeCompletionResult): string {
   return `${result.content ?? ""}\n${result.text ?? ""}`.trim();

@@ -5,6 +5,7 @@ import { getActiveContext } from "@/services/inference/llamaRuntime";
 import {
   looksLikeTextToolCall,
   resolveWebSearchToolCall,
+  stripToolCallTags,
   type WebSearchToolCall,
 } from "@/services/inference/toolCallParsing";
 import { searchWeb, type WebSearchResult } from "@/services/tavilySearch";
@@ -91,19 +92,23 @@ async function generateReplyWithToolCalling(
   onToken?: StreamTokenHandler,
   options?: ChatCompletionOptions,
 ): Promise<ChatCompletionResult> {
-  console.log(`${LOG_PREFIX} Pass 1: checking if model calls web_search (no streaming)`);
+  console.log(`${LOG_PREFIX} Pass 1: checking if model calls web_search`);
 
-  const toolSelectionResponse = await runModelCompletion(buildConversationMessages(userPrompt), "toolSelection");
+  const uiStreamHandler = createUiStreamHandler(onToken);
+  const toolSelectionResponse = await runModelCompletion(
+    buildConversationMessages(userPrompt),
+    "toolSelection",
+    uiStreamHandler,
+  );
   const webSearchRequest = resolveWebSearchToolCall(toolSelectionResponse, userPrompt);
 
   if (webSearchRequest) {
     return generateGroundedReply(userPrompt, webSearchRequest, onToken, options);
   }
 
-  const assistantMessageContent = readAssistantContent(toolSelectionResponse);
+  const assistantMessageContent = toDisplayContent(readAssistantContent(toolSelectionResponse));
   console.log(`${LOG_PREFIX} No tool call — direct answer:`, assistantMessageContent);
 
-  streamToken(onToken, assistantMessageContent);
   return buildChatCompletionResult(assistantMessageContent, toolSelectionResponse);
 }
 
@@ -113,8 +118,12 @@ async function generateReplyWithToolCalling(
 async function generateDirectReply(userPrompt: string, onToken?: StreamTokenHandler): Promise<ChatCompletionResult> {
   console.log(`${LOG_PREFIX} Streaming direct answer (no tools configured)`);
 
-  const directChatResponse = await runModelCompletion(buildConversationMessages(userPrompt), "directChat", onToken);
-  const assistantMessageContent = readAssistantContent(directChatResponse);
+  const directChatResponse = await runModelCompletion(
+    buildConversationMessages(userPrompt),
+    "directChat",
+    createUiStreamHandler(onToken),
+  );
+  const assistantMessageContent = toDisplayContent(readAssistantContent(directChatResponse));
 
   console.log(`${LOG_PREFIX} Response:`, assistantMessageContent);
   return buildChatCompletionResult(assistantMessageContent, directChatResponse);
@@ -145,15 +154,16 @@ async function generateGroundedReply(
     const groundedAnswerResponse = await runModelCompletion(
       buildSearchGroundedMessages(userPrompt, groundedSearchContext),
       "groundedAnswer",
-      (accumulatedContent) => streamToken(onToken, accumulatedContent, { skipToolCallText: true }),
+      createUiStreamHandler(onToken),
     );
 
-    const assistantMessageContent = replaceLeakedToolCall(
-      readAssistantContent(groundedAnswerResponse),
-      groundedSearchContext,
-    );
-    console.log(`${LOG_PREFIX} Final answer:`, assistantMessageContent);
-    return buildChatCompletionResult(assistantMessageContent, groundedAnswerResponse);
+    const rawAssistantContent = readAssistantContent(groundedAnswerResponse);
+    const assistantMessageContent = replaceLeakedToolCall(rawAssistantContent, groundedSearchContext);
+    const displayContent = looksLikeTextToolCall(rawAssistantContent)
+      ? assistantMessageContent
+      : toDisplayContent(rawAssistantContent);
+    console.log(`${LOG_PREFIX} Final answer:`, displayContent);
+    return buildChatCompletionResult(displayContent, groundedAnswerResponse);
   } catch (error) {
     console.error(`${LOG_PREFIX} Pass 2 failed, falling back to Tavily answer:`, error);
 
@@ -244,26 +254,37 @@ function readAssistantContent(response: NativeCompletionResult): string {
   return response.content?.trim() || response.text?.trim() || "";
 }
 
+/** Strips raw tool-call syntax before text is shown or persisted. */
+function toDisplayContent(raw: string): string {
+  return stripToolCallTags(raw);
+}
+
+/** Progressive UI updater shared by every streamed completion pass (including Tavily pass 2). */
+function createUiStreamHandler(onToken?: StreamTokenHandler): StreamTokenHandler | undefined {
+  if (!onToken) {
+    return undefined;
+  }
+
+  return (accumulatedContent) => streamToken(onToken, accumulatedContent);
+}
+
 /** Substitutes the search context when the model leaks raw tool-call syntax into its reply. */
 function replaceLeakedToolCall(assistantMessageContent: string, searchContextFallback: string): string {
   return looksLikeTextToolCall(assistantMessageContent) ? searchContextFallback : assistantMessageContent;
 }
 
-/** Forwards accumulated content to the UI callback, optionally suppressing tool-call syntax. */
-function streamToken(
-  onToken: StreamTokenHandler | undefined,
-  accumulatedContent: string,
-  options?: { skipToolCallText?: boolean },
-): void {
+/** Forwards sanitized accumulated content to the UI callback. */
+function streamToken(onToken: StreamTokenHandler | undefined, accumulatedContent: string): void {
   if (!onToken || accumulatedContent.length === 0) {
     return;
   }
 
-  if (options?.skipToolCallText && looksLikeTextToolCall(accumulatedContent)) {
+  const displayContent = stripToolCallTags(accumulatedContent);
+  if (displayContent.length === 0) {
     return;
   }
 
-  onToken(accumulatedContent);
+  onToken(displayContent);
 }
 
 /** Maps a llama.rn result into the public chat completion shape. */

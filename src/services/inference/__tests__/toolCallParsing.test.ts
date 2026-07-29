@@ -1,5 +1,9 @@
 import { buildCompletionResult } from "@tests/testUtils";
-import { looksLikeTextToolCall, resolveWebSearchToolCall } from "@/services/inference/toolCallParsing";
+import {
+  looksLikeTextToolCall,
+  resolveWebSearchToolCall,
+  stripToolCallTags,
+} from "@/services/inference/toolCallParsing";
 
 const USER_FALLBACK_QUERY = "What is the price of the Cursor Pro plan?";
 
@@ -104,5 +108,19 @@ describe("looksLikeTextToolCall (PARSE-08)", () => {
     expect(looksLikeTextToolCall("I ran a web_search for you.")).toBe(false);
     expect(looksLikeTextToolCall("<|tool_call|> some other tool")).toBe(false);
     expect(looksLikeTextToolCall("just a normal sentence")).toBe(false);
+  });
+});
+
+describe("stripToolCallTags (PARSE-09)", () => {
+  it("removes Gemma-style inline tool call blocks", () => {
+    expect(stripToolCallTags('Here you go.<|tool_call|>call:web_search{"query":"x"}')).toBe("Here you go.");
+  });
+
+  it("removes XML-style tool call fragments during streaming", () => {
+    expect(stripToolCallTags("Answer:<tool_call><function=web_search")).toBe("Answer:");
+  });
+
+  it("returns an empty string when the output is only tool-call syntax", () => {
+    expect(stripToolCallTags('<|tool_call|>call:web_search{"query":"x"}')).toBe("");
   });
 });

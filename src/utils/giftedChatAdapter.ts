@@ -1,7 +1,7 @@
 import type { IMessage, User } from "react-native-gifted-chat";
-
+import { stripToolCallTags } from "@/services/inference/toolCallParsing";
 import type { ChatMessage } from "@/types/chat";
-import { stripReasoningTags } from "@/utils/reasoningFilter";
+import { stripReasoningTags, stripReasoningTagsForStreaming } from "@/utils/reasoningFilter";
 
 export const CHAT_USER: User = {
   _id: "user",
@@ -38,8 +38,8 @@ export function toGiftedChatMessages(messages: ChatMessage[]): PocketChatMessage
       const text =
         message.role === "assistant"
           ? message.status === "streaming"
-            ? message.content
-            : stripReasoningTags(message.content)
+            ? stripToolCallTags(stripReasoningTagsForStreaming(message.content))
+            : stripToolCallTags(stripReasoningTags(message.content))
           : message.content;
 
       return {

@@ -113,6 +113,24 @@ describe("chatCompletion", () => {
       expect(completion).toHaveBeenCalledTimes(1);
     });
 
+    it("streams pass 1 through the same UI handler used by grounded answers (INF-13)", async () => {
+      jest.mocked(isTavilyConfigured).mockReturnValue(true);
+      const onToken = jest.fn();
+      const completion = jest.fn<ReturnType<CompletionHandler>, Parameters<CompletionHandler>>(
+        async (_params, onData) => {
+          onData?.({ content: "Shakespeare " });
+          onData?.({ content: "Shakespeare wrote Hamlet." });
+          return buildCompletionResult({ content: "Shakespeare wrote Hamlet." });
+        },
+      );
+      installLlamaContext(completion);
+
+      await chatCompletion("Who wrote Hamlet?", onToken);
+
+      expect(onToken).toHaveBeenNthCalledWith(1, "Shakespeare ");
+      expect(onToken).toHaveBeenNthCalledWith(2, "Shakespeare wrote Hamlet.");
+    });
+
     it("does not search on keyword-heavy prompts unless the model calls the tool (INF-06)", async () => {
       jest.mocked(isTavilyConfigured).mockReturnValue(true);
       const completion = jest.fn<ReturnType<CompletionHandler>, Parameters<CompletionHandler>>(async () =>
@@ -227,6 +245,24 @@ describe("chatCompletion", () => {
       expect(onToken).toHaveBeenNthCalledWith(1, "On-device ");
       expect(onToken).toHaveBeenNthCalledWith(2, "On-device inference.");
       expect(onToken).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not forward raw tool-call syntax to onToken while streaming (INF-13)", async () => {
+      jest.mocked(isTavilyConfigured).mockReturnValue(false);
+      const onToken = jest.fn();
+      const completion = jest.fn<ReturnType<CompletionHandler>, Parameters<CompletionHandler>>(
+        async (_params, onData) => {
+          onData?.({ content: "Looking it up " });
+          onData?.({ content: 'Looking it up <|tool_call|>call:web_search{"query":"x"}' });
+          return buildCompletionResult({ content: 'Looking it up <|tool_call|>call:web_search{"query":"x"}' });
+        },
+      );
+      installLlamaContext(completion);
+
+      await chatCompletion("What is Cursor Pro?", onToken);
+
+      expect(onToken).toHaveBeenCalledWith("Looking it up ");
+      expect(onToken.mock.calls.every(([chunk]) => !chunk.includes("tool_call"))).toBe(true);
     });
 
     it("maps llama.rn timings into chat metrics (INF-15)", async () => {
