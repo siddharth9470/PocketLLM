@@ -35,13 +35,6 @@ describe("ChatDB message embeddings", () => {
   });
 
   it("persists embeddings into message_embeddings", async () => {
-    mockExecute.mockImplementation(async (sql: string) => {
-      if (String(sql).includes("COUNT(*)")) {
-        return { rows: [{ count: 1 }], rowsAffected: 0 };
-      }
-      return { rows: [], rowsAffected: 1 };
-    });
-
     await saveMessageEmbedding(MESSAGE_ID, CONVERSATION_ID, MESSAGE_ROLE, QUERY_VECTOR);
 
     const insertCall = mockExecute.mock.calls.find(([sql]) =>

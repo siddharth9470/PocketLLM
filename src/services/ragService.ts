@@ -16,6 +16,10 @@ let embeddingModule: TextEmbeddingsModule | null = null;
 let embeddingModulePromise: Promise<TextEmbeddingsModule | null> | null = null;
 let prewarmPromise: Promise<boolean> | null = null;
 
+/**
+ * Idempotently registers the Expo resource-fetcher adapter with ExecuTorch.
+ * Must run before any model download / load; subsequent calls are no-ops.
+ */
 function initializeExecutorch(): void {
   if (isExecutorchInitialized) {
     return;
@@ -25,10 +29,20 @@ function initializeExecutorch(): void {
   isExecutorchInitialized = true;
 }
 
+/**
+ * Returns whether the native ExecuTorch runtime and `TextEmbeddingsModule` API
+ * are present on this device. Used to degrade RAG gracefully when native
+ * bindings are unavailable (e.g. unsupported ABI).
+ */
 function isEmbeddingRuntimeAvailable(): boolean {
   return isAvailable && typeof TextEmbeddingsModule?.fromModelName === "function";
 }
 
+/**
+ * Lazily loads the MiniLM embedding model as a process-wide singleton.
+ * Concurrent callers share one in-flight promise; failures clear that promise
+ * so a later call can retry. Returns `null` when the native runtime is missing.
+ */
 async function ensureEmbeddingModelReady(): Promise<TextEmbeddingsModule | null> {
   if (!isEmbeddingRuntimeAvailable()) {
     return null;
@@ -55,6 +69,11 @@ async function ensureEmbeddingModelReady(): Promise<TextEmbeddingsModule | null>
   return embeddingModulePromise;
 }
 
+/**
+ * Converts text into a fixed-length float embedding vector.
+ * Empty / whitespace-only input yields a zero vector of `EMBEDDING_DIMENSION`.
+ * Returns `null` when the embedding model cannot be loaded.
+ */
 async function embedText(text: string): Promise<Float32Array | null> {
   const normalizedText = text.trim();
   if (!normalizedText) {
@@ -69,6 +88,12 @@ async function embedText(text: string): Promise<Float32Array | null> {
   return loadedModule.forward(normalizedText);
 }
 
+/**
+ * Formats retrieved chat messages into a compact system-prompt context block.
+ * Skips empty content, prefixes each turn with User/Assistant, and stops once
+ * the assembled block would exceed `RAG_CONTEXT_MAX_CHARS`. Returns `""` when
+ * nothing usable remains after filtering / truncation.
+ */
 function buildRagContextBlock(messages: ChatMessage[]): string {
   const usableMessages = messages.filter((message) => message.content.trim().length > 0);
   if (usableMessages.length === 0) {
@@ -97,7 +122,12 @@ function buildRagContextBlock(messages: ChatMessage[]): string {
   return `${RAG_CONTEXT_HEADER}\n${lines.join("\n\n")}`;
 }
 
-/** Registers ExecuTorch and lazily loads the embedding model at app boot. */
+/**
+ * Boot-time helper that registers ExecuTorch and starts loading the embedding
+ * model without blocking chat UI. Shares a single promise across callers and
+ * resolves `true` only when the model instance is ready; load errors resolve
+ * as `false` so the app can continue without RAG.
+ */
 export async function prewarmEmbeddingModel(): Promise<boolean> {
   initializeExecutorch();
 
@@ -110,7 +140,12 @@ export async function prewarmEmbeddingModel(): Promise<boolean> {
   return prewarmPromise;
 }
 
-/** Fire-and-forget embedding persistence for a saved chat message. */
+/**
+ * Schedules background embedding + SQLite persistence for a saved chat message.
+ * Intended to be called immediately after `createMessage` for user and assistant
+ * turns. Returns immediately (fire-and-forget); empty text is ignored, and
+ * failures are logged without interrupting the send flow.
+ */
 export function queueMessageEmbedding(
   messageId: string,
   conversationId: string,
@@ -140,7 +175,12 @@ export function queueMessageEmbedding(
   });
 }
 
-/** Embeds the query, retrieves similar past turns, and returns a RAG context block. */
+/**
+ * Retrieval path for prompt assembly: embeds the current user query, runs a
+ * sqlite-vec KNN search for similar past messages, and returns a trimmed
+ * context string for injection into the chat system prompt. Returns `""` on
+ * blank input, missing model, or any retrieval failure so inference still runs.
+ */
 export async function buildRagContextForQuery(query: string): Promise<string> {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) {
@@ -168,7 +208,12 @@ export async function buildRagContextForQuery(query: string): Promise<string> {
   }
 }
 
-/** Dev-only vec0 write/read verification — exercises op-sqlite without a chat model. */
+/**
+ * `__DEV__`-oriented smoke test that exercises write + KNN read against
+ * `message_embeddings` without requiring a downloaded chat GGUF. Writes a
+ * disposable smoke row, runs similarity search, and returns whether both
+ * steps completed without throwing.
+ */
 export async function verifyEmbeddingPipelineOnDevice(): Promise<boolean> {
   try {
     await ensureDatabaseReady();

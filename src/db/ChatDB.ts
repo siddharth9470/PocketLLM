@@ -1,15 +1,13 @@
 import { ANDROID_DATABASE_PATH, type DB, IOS_LIBRARY_PATH, open } from "@op-engineering/op-sqlite";
 import { Platform } from "react-native";
+
 import { EMBEDDING_DIMENSION, EMBEDDING_MODEL_ID } from "@/constants/rag";
-import { ragDebug } from "@/services/rag/ragDebug";
 import type { ChatMessage, ChatMessageAttachment, Conversation } from "@/types/chat";
 
 const MESSAGE_EMBEDDINGS_DELETE_SQL = "DELETE FROM message_embeddings WHERE message_id = ?;";
 
 const MESSAGE_EMBEDDINGS_INSERT_SQL =
   "INSERT INTO message_embeddings(message_id, conversation_id, role, dimensions, embed_model_id, embedding) VALUES (?, ?, ?, ?, ?, ?);";
-
-const MESSAGE_EMBEDDINGS_COUNT_SQL = "SELECT COUNT(*) AS count FROM message_embeddings;";
 
 const MESSAGE_EMBEDDINGS_VEC0_DDL = `CREATE VIRTUAL TABLE message_embeddings USING vec0(
   message_id TEXT PRIMARY KEY,
@@ -274,9 +272,6 @@ class ChatDatabaseManager {
       }
 
       this.ensureMessageEmbeddingsTable();
-
-      const embeddingCount = await this.getMessageEmbeddingCount();
-      ragDebug("Database initialized — message_embeddings row count", { embeddingCount });
     } catch (error) {
       console.error("CRITICAL: Failed to initialize chat database:", error);
       throw error;
@@ -289,9 +284,6 @@ class ChatDatabaseManager {
     const createSql = String((schemaResult.rows[0] as { sql: string | null } | undefined)?.sql ?? "");
 
     if (!isCurrentMessageEmbeddingsSchema(createSql)) {
-      ragDebug("Recreating message_embeddings vec0 table", {
-        previousSql: createSql || null,
-      });
       connection.executeSync("DROP TABLE IF EXISTS message_embeddings;");
       connection.executeSync(MESSAGE_EMBEDDINGS_VEC0_DDL);
     }
@@ -587,13 +579,6 @@ class ChatDatabaseManager {
     return this.hydrateMessagesWithAttachments(messages);
   }
 
-  public async getMessageEmbeddingCount(): Promise<number> {
-    const connection = this.getDatabaseConnection();
-    const result = await connection.execute(MESSAGE_EMBEDDINGS_COUNT_SQL);
-    const countRow = result.rows[0] as { count: number } | undefined;
-    return countRow?.count ?? 0;
-  }
-
   public async saveMessageEmbedding(
     messageId: string,
     conversationId: string,
@@ -608,44 +593,15 @@ class ChatDatabaseManager {
       );
     }
 
-    ragDebug("Writing embedding to SQLite", {
+    await connection.execute(MESSAGE_EMBEDDINGS_DELETE_SQL, [messageId]);
+    await connection.execute(MESSAGE_EMBEDDINGS_INSERT_SQL, [
       messageId,
       conversationId,
       role,
-      dimensions: EMBEDDING_DIMENSION,
-      embedModelId: EMBEDDING_MODEL_ID,
-      sql: MESSAGE_EMBEDDINGS_INSERT_SQL,
-      vectorLength: embedding.length,
-    });
-
-    try {
-      await connection.execute(MESSAGE_EMBEDDINGS_DELETE_SQL, [messageId]);
-      await connection.execute(MESSAGE_EMBEDDINGS_INSERT_SQL, [
-        messageId,
-        conversationId,
-        role,
-        EMBEDDING_DIMENSION,
-        EMBEDDING_MODEL_ID,
-        embedding,
-      ]);
-      const embeddingCount = await this.getMessageEmbeddingCount();
-      ragDebug("Embedding stored successfully in message_embeddings", {
-        messageId,
-        conversationId,
-        role,
-        vectorLength: embedding.length,
-        totalEmbeddingRows: embeddingCount,
-      });
-    } catch (error: unknown) {
-      ragDebug("Failed to write embedding to message_embeddings", {
-        messageId,
-        conversationId,
-        role,
-        vectorLength: embedding.length,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
+      EMBEDDING_DIMENSION,
+      EMBEDDING_MODEL_ID,
+      embedding,
+    ]);
   }
 
   public async searchSimilarMessages(queryEmbedding: Float32Array, limit = 4): Promise<ChatMessage[]> {
@@ -657,70 +613,30 @@ class ChatDatabaseManager {
       );
     }
 
-    const knnSql = buildMessageEmbeddingsKnnSql(limit);
-    const fallbackSql = buildMessageEmbeddingsFallbackSql(limit);
-
-    ragDebug("Executing KNN vector search", {
-      sql: knnSql,
-      fallbackSql,
-      queryVectorLength: queryEmbedding.length,
-      limit,
-    });
-
     let knnResult: Awaited<ReturnType<DB["execute"]>>;
     try {
-      knnResult = await connection.execute(knnSql, [queryEmbedding]);
+      knnResult = await connection.execute(buildMessageEmbeddingsKnnSql(limit), [queryEmbedding]);
     } catch (knnError: unknown) {
-      ragDebug("vec0 KNN query failed, falling back to vec_distance_cosine", {
-        error: knnError instanceof Error ? knnError.message : String(knnError),
-      });
-      knnResult = await connection.execute(fallbackSql, [queryEmbedding]);
+      console.warn("vec0 KNN query failed, falling back to vec_distance_cosine:", knnError);
+      knnResult = await connection.execute(buildMessageEmbeddingsFallbackSql(limit), [queryEmbedding]);
     }
 
-    const knnMatches = knnResult.rows.map((row) => {
-      const matchRow = row as { message_id: string; distance: number };
-      return {
-        messageId: String(matchRow.message_id),
-        distance: matchRow.distance,
-      };
-    });
-
-    ragDebug("KNN search completed", {
-      matchCount: knnMatches.length,
-      matches: knnMatches,
-    });
-
-    if (knnMatches.length === 0) {
+    if (knnResult.rows.length === 0) {
       return [];
     }
 
-    const messageIds = knnMatches.map((match) => match.messageId);
+    const messageIds = knnResult.rows.map((row) => String((row as { message_id: string }).message_id));
     const placeholders = messageIds.map(() => "?").join(", ");
-    const hydrateSql = `SELECT * FROM chat_messages
+    const messagesResult = await connection.execute(
+      `SELECT * FROM chat_messages
        WHERE id IN (${placeholders})
          AND status = 'completed'
-       ORDER BY created_at ASC;`;
-
-    ragDebug("Hydrating matched messages from chat_messages", {
-      sql: hydrateSql,
+       ORDER BY created_at ASC;`,
       messageIds,
-    });
-
-    const messagesResult = await connection.execute(hydrateSql, messageIds);
+    );
 
     const messages = messagesResult.rows.map((row) => rowToMessage(row as unknown as ChatMessageRow));
-    const hydratedMessages = await this.hydrateMessagesWithAttachments(messages);
-
-    ragDebug("Historical messages hydrated for RAG context", {
-      hydratedCount: hydratedMessages.length,
-      messages: hydratedMessages.map((message) => ({
-        id: message.id,
-        role: message.role,
-        contentLength: message.content.length,
-      })),
-    });
-
-    return hydratedMessages;
+    return this.hydrateMessagesWithAttachments(messages);
   }
 }
 
@@ -787,8 +703,4 @@ export async function saveMessageEmbedding(
 
 export async function searchSimilarMessages(queryEmbedding: Float32Array, limit = 4): Promise<ChatMessage[]> {
   return chatDb.searchSimilarMessages(queryEmbedding, limit);
-}
-
-export async function getMessageEmbeddingCount(): Promise<number> {
-  return chatDb.getMessageEmbeddingCount();
 }
