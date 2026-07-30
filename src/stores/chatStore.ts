@@ -24,7 +24,7 @@ import {
 } from "@/db/ChatDB";
 import { chatCompletion, initializeModel, resolveDownloadedModelPath } from "@/services/chatHelper";
 import { appLogger } from "@/services/logger";
-import { buildRagContextForQuery, queueMessageEmbedding } from "@/services/ragService";
+import { queueMessageEmbedding } from "@/services/ragService";
 import type { ChatMessage, Conversation } from "@/types/chat";
 import { deriveConversationTitle, generateChatId } from "@/utils/chatIds";
 import { buildConversationPreview } from "@/utils/conversationPreview";
@@ -403,8 +403,6 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const ragContext = await buildRagContextForQuery(messageText, chatTrace.traceId);
-
         const completionResult = await chatCompletion(
           messageText,
           (accumulatedText) => {
@@ -417,7 +415,6 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
             );
           },
           {
-            ragContext,
             traceId: chatTrace.traceId,
             onSearching: () => {
               if (!isConversationFocused(conversationId)) {

@@ -2,13 +2,19 @@ export const CHAT_SYSTEM_PROMPT = `You are PocketLLM, a helpful on-device assist
 
 When the user asks about current events, recent news, live data (weather, prices, scores, stock quotes), specific facts you are unsure about, or anything that requires up-to-date information, you MUST call the web_search tool instead of guessing.
 
-Never invent facts, dates, numbers, or news. If you do not know and the question needs real-world data, call web_search.
+When the user asks about something they previously discussed, preferences they mentioned, earlier decisions, prior answers, or any detail that may exist in past chat messages on this device, call the search_local_history tool with a concise query.
 
-For general knowledge you are confident about, answer directly without searching.`;
+Never invent facts, dates, numbers, or news. If you do not know and the question needs real-world data, call web_search. If you need earlier conversation context, call search_local_history.
+
+For greetings and general knowledge you are confident about, answer directly without calling tools.`;
 
 export const CHAT_ANSWER_WITH_SEARCH_PROMPT = `You are PocketLLM, a helpful assistant.
 
 Web search results are provided below. Answer the user's question using those results. Include specific prices, dates, and facts when present. Be concise. Do not call tools.`;
+
+export const CHAT_ANSWER_WITH_RAG_PROMPT = `You are PocketLLM, a helpful assistant.
+
+Relevant excerpts from the user's past conversations on this device are provided below. Answer the user's question using those excerpts when they are relevant. Be concise. Do not call tools. If the excerpts do not contain enough information, say so clearly and answer from what you know without inventing past conversation details.`;
 
 export const WEB_SEARCH_TOOL = [
   {
@@ -31,6 +37,41 @@ export const WEB_SEARCH_TOOL = [
   },
 ] as const;
 
+export const LOCAL_SEARCH_TOOL = [
+  {
+    type: "function",
+    function: {
+      name: "search_local_history",
+      description:
+        "Search this device's past chat messages for earlier discussions, user preferences, prior decisions, or details the user mentioned before. Use when the answer may already exist in conversation history.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Concise semantic query describing what to find in past chats.",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+] as const;
+
+export type ChatToolDefinition = (typeof WEB_SEARCH_TOOL)[number] | (typeof LOCAL_SEARCH_TOOL)[number];
+
+/**
+ * Builds the Pass-1 tool list for llama.rn.
+ * Local history search is always offered; web search is included only when Tavily is configured.
+ */
+export function buildChatTools(webSearchEnabled: boolean): ChatToolDefinition[] {
+  if (webSearchEnabled) {
+    return [...WEB_SEARCH_TOOL, ...LOCAL_SEARCH_TOOL];
+  }
+
+  return [...LOCAL_SEARCH_TOOL];
+}
+
 export const ChatScreenLabels = {
   EMPTY_STATE: "There is no chat.",
   CREATE_NEW_CHAT: "Create New Chat",
@@ -52,6 +93,7 @@ export const ChatScreenLabels = {
   INFERENCE_ERROR_TITLE: "Generation Failed",
   MODEL_INIT_FAILED: "Could not load the selected model. Please try again.",
   SEARCHING_WEB: "Searching the web...",
+  SEARCHING_HISTORY: "Searching chat history...",
 } as const;
 
 export const CONTEXT_WINDOW_TOKENS_ANDROID = 4096;

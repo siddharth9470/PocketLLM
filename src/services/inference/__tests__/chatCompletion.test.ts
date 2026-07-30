@@ -1,7 +1,7 @@
 import { buildCompletionResult } from "@tests/testUtils";
 import type { CompletionParams, LlamaContext, NativeCompletionResult } from "llama.rn";
 import { isTavilyConfigured } from "@/config/env";
-import { WEB_SEARCH_TOOL } from "@/constants/chat";
+import { LOCAL_SEARCH_TOOL, WEB_SEARCH_TOOL } from "@/constants/chat";
 import { chatCompletion } from "@/services/inference/chatCompletion";
 import { getActiveContext } from "@/services/inference/llamaRuntime";
 import { searchWeb, type WebSearchResult } from "@/services/tavilySearch";
@@ -9,6 +9,9 @@ import { searchWeb, type WebSearchResult } from "@/services/tavilySearch";
 jest.mock("@/config/env", () => ({ isTavilyConfigured: jest.fn() }));
 jest.mock("@/services/inference/llamaRuntime", () => ({ getActiveContext: jest.fn() }));
 jest.mock("@/services/tavilySearch", () => ({ searchWeb: jest.fn() }));
+jest.mock("@/services/ragService", () => ({
+  buildRagContextForQuery: jest.fn().mockResolvedValue(""),
+}));
 
 type CompletionHandler = (
   params: CompletionParams,
@@ -65,7 +68,7 @@ describe("chatCompletion", () => {
   });
 
   describe("routing without web search (INF-02)", () => {
-    it("runs a single direct completion and never calls Tavily", async () => {
+    it("offers only search_local_history and never calls Tavily when web search is off", async () => {
       jest.mocked(isTavilyConfigured).mockReturnValue(false);
       const completion = jest.fn<ReturnType<CompletionHandler>, Parameters<CompletionHandler>>(
         async (_params, onData) => {
@@ -80,12 +83,13 @@ describe("chatCompletion", () => {
       expect(result.text).toBe("Paris.");
       expect(searchWeb).not.toHaveBeenCalled();
       expect(completion).toHaveBeenCalledTimes(1);
-      expect(lastCompletionParams(completion).tools).toBeUndefined();
+      expect(lastCompletionParams(completion).tools).toEqual([...LOCAL_SEARCH_TOOL]);
+      expect(lastCompletionParams(completion).tool_choice).toBe("auto");
     });
   });
 
   describe("routing with tool calling enabled (INF-03, INF-05, INF-06)", () => {
-    it("offers the web_search tool on the first pass", async () => {
+    it("offers web_search and search_local_history on the first pass", async () => {
       jest.mocked(isTavilyConfigured).mockReturnValue(true);
       const completion = jest.fn<ReturnType<CompletionHandler>, Parameters<CompletionHandler>>(async () =>
         buildCompletionResult({ content: "General knowledge answer." }),
@@ -95,7 +99,7 @@ describe("chatCompletion", () => {
       await chatCompletion("Who wrote Hamlet?");
 
       const firstPassParams = completion.mock.calls[0][0];
-      expect(firstPassParams.tools).toEqual(WEB_SEARCH_TOOL);
+      expect(firstPassParams.tools).toEqual([...WEB_SEARCH_TOOL, ...LOCAL_SEARCH_TOOL]);
       expect(firstPassParams.tool_choice).toBe("auto");
     });
 

@@ -52,6 +52,8 @@ interface EventPresentation {
 interface TraceRuntimeState {
   hasRoot: boolean;
   hasPreview: boolean;
+  /** High-resolution epoch from `nowMs()` when the trace was created. */
+  startedAtMs: number;
 }
 
 /** Identifiers that clutter every line — shown only on the trace root or in debug. */
@@ -65,7 +67,18 @@ const NOISY_FIELD_KEYS = new Set([
 ]);
 
 /** Prefer these as a quoted story preview under the event line. */
-const PREVIEW_FIELD_KEYS = ["promptPreview", "replyPreview", "query", "title", "bodyPreview"] as const;
+const PREVIEW_FIELD_KEYS = [
+  "promptPreview",
+  "replyPreview",
+  "query",
+  "title",
+  "bodyPreview",
+  "systemPromptPreview",
+  "userPromptPreview",
+] as const;
+
+/** Events that render a full multi-line payload block under the tree branch. */
+const PAYLOAD_BLOCK_EVENTS = new Set(["payload.system_prompt", "payload.messages"]);
 
 const TERMINAL_EVENTS = new Set(["send.completed", "send.failed", "trace.completed", "trace.failed"]);
 
@@ -104,6 +117,8 @@ const EVENT_PRESENTATION: Record<string, EventPresentation> = {
   "pass2.grounded_answer.started": { emoji: "🤖", label: "Pass 2 · grounded answer" },
   "pass2.grounded_answer.completed": { emoji: "💬", label: "Pass 2 · reply ready" },
   "pass2.grounded_answer.failed": { emoji: "💥", label: "Pass 2 failed" },
+  "payload.system_prompt": { emoji: "📤", label: "System prompt" },
+  "payload.messages": { emoji: "📤", label: "Outgoing messages" },
   "web_search.started": { emoji: "🌐", label: "Web search started" },
   "web_search.completed": { emoji: "🌐", label: "Web search done" },
   "web_search.empty_results": { emoji: "🌐", label: "Web search empty" },
@@ -133,6 +148,37 @@ const traceStates = new Map<string, TraceRuntimeState>();
 function createTraceId(): string {
   traceCounter = (traceCounter + 1) % 10_000;
   return `t${traceCounter.toString().padStart(4, "0")}`;
+}
+
+/** Lightweight monotonic clock for trace latency — prefers `performance.now()`. */
+function nowMs(): number {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+
+  return Date.now();
+}
+
+/** Ensures a trace has timing state; first touch stamps `startedAtMs`. */
+function getOrCreateTraceState(traceId: string): TraceRuntimeState {
+  const existing = traceStates.get(traceId);
+  if (existing) {
+    return existing;
+  }
+
+  const created: TraceRuntimeState = {
+    hasRoot: false,
+    hasPreview: false,
+    startedAtMs: nowMs(),
+  };
+  traceStates.set(traceId, created);
+  return created;
+}
+
+/** Formats elapsed seconds since trace start for a fixed, scannable column (e.g. `[0.85s]`). */
+function formatElapsedLabel(startedAtMs: number): string {
+  const elapsedSeconds = Math.max(0, (nowMs() - startedAtMs) / 1000);
+  return `[${elapsedSeconds.toFixed(2)}s]`;
 }
 
 function truncate(value: string, maxLength: number): string {
@@ -239,6 +285,26 @@ function formatDetails(fields: LogFields | undefined, includeNoisy: boolean): st
       continue;
     }
 
+    if (key === "messageCount") {
+      parts.push(`${value} msgs`);
+      continue;
+    }
+
+    if (key === "systemPromptLen") {
+      parts.push(`${value} chars`);
+      continue;
+    }
+
+    if (key === "roles" && typeof value === "string") {
+      parts.push(value);
+      continue;
+    }
+
+    if (key === "purpose" && typeof value === "string") {
+      parts.push(value);
+      continue;
+    }
+
     if (key === "resultCount") {
       parts.push(`${value} results`);
       continue;
@@ -316,6 +382,44 @@ function writePreview(level: LogLevel, preview: string, indent: string): void {
   writeLine(level, `${indent}"${preview}"`);
 }
 
+/**
+ * Renders a tree-safe multi-line payload block under a branch line.
+ * Prints the complete body with no character/line truncation; each source line
+ * (including blanks) is prefixed so the ┌│└ box stays aligned in the trace tree.
+ */
+function writePayloadBlock(level: LogLevel, body: string, indent: string): void {
+  const normalized = body.replace(/\r\n/g, "\n");
+  if (normalized.trim().length === 0) {
+    return;
+  }
+
+  const lines = normalized.split("\n");
+
+  writeLine(level, `${indent}┌`);
+  for (const line of lines) {
+    writeLine(level, `${indent}│ ${line}`);
+  }
+  writeLine(level, `${indent}└`);
+}
+
+function extractPayloadBody(event: string, fields?: LogFields): string | undefined {
+  if (!fields) {
+    return undefined;
+  }
+
+  if (event === "payload.system_prompt") {
+    const value = fields.systemPromptPreview;
+    return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  }
+
+  if (event === "payload.messages") {
+    const value = fields.userPromptPreview;
+    return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  }
+
+  return undefined;
+}
+
 function formatRootHeader(domain: LogDomain, traceId: string, fields?: LogFields): string {
   const modelId = typeof fields?.modelId === "string" ? fields.modelId : undefined;
   const suffix = modelId ? ` · ${modelId}` : "";
@@ -329,11 +433,12 @@ function formatBranchLine(
   fields: LogFields | undefined,
   isTerminal: boolean,
   includeNoisy: boolean,
+  elapsedLabel: string,
 ): string {
   const presentation = presentEvent(domain, event);
   const connector = isTerminal ? "└─" : "├─";
   const levelHint = level === "warn" ? " ⚠" : level === "error" ? " ✗" : "";
-  return `${connector} ${presentation.emoji} ${presentation.label}${levelHint}${formatDetails(fields, includeNoisy)}`;
+  return `${connector} ${elapsedLabel} ${presentation.emoji} ${presentation.label}${levelHint}${formatDetails(fields, includeNoisy)}`;
 }
 
 function formatStandaloneLine(
@@ -350,17 +455,21 @@ function formatStandaloneLine(
 
 function emit(domain: LogDomain, level: LogLevel, event: string, fields?: LogFields, traceId?: string): void {
   const includeNoisy = level === "debug";
-  const preview = extractPreview(fields);
+  const payloadBody = PAYLOAD_BLOCK_EVENTS.has(event) ? extractPayloadBody(event, fields) : undefined;
+  const preview = payloadBody ? undefined : extractPreview(fields);
 
   if (!traceId) {
     writeLine(level, formatStandaloneLine(domain, level, event, fields, includeNoisy));
-    if (preview) {
+    if (payloadBody) {
+      writePayloadBlock(level, payloadBody, "   ");
+    } else if (preview) {
       writePreview(level, preview, "   ");
     }
     return;
   }
 
-  const state = traceStates.get(traceId) ?? { hasRoot: false, hasPreview: false };
+  const state = getOrCreateTraceState(traceId);
+  const elapsedLabel = formatElapsedLabel(state.startedAtMs);
   const isTerminal = TERMINAL_EVENTS.has(event);
 
   if (!state.hasRoot) {
@@ -386,9 +495,12 @@ function emit(domain: LogDomain, level: LogLevel, event: string, fields?: LogFie
     return;
   }
 
-  writeLine(level, formatBranchLine(domain, level, event, fields, isTerminal, includeNoisy));
-  if (preview) {
-    writePreview(level, preview, isTerminal ? "   " : "│  ");
+  writeLine(level, formatBranchLine(domain, level, event, fields, isTerminal, includeNoisy, elapsedLabel));
+  const branchIndent = isTerminal ? "   " : "│  ";
+  if (payloadBody) {
+    writePayloadBlock(level, payloadBody, branchIndent);
+  } else if (preview) {
+    writePreview(level, preview, branchIndent);
   }
 
   if (isTerminal) {
@@ -454,6 +566,12 @@ export const appLogger = {
    */
   startTrace(domain: LogDomain, fields?: LogFields): TraceLogger {
     const traceId = createTraceId();
+    // Stamp the clock before the root emit so elapsed labels are relative to trace start.
+    traceStates.set(traceId, {
+      hasRoot: false,
+      hasPreview: false,
+      startedAtMs: nowMs(),
+    });
     const trace = createTraceLogger(domain, traceId);
     emit(domain, "info", "trace.started", fields, traceId);
     return trace;

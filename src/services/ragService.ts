@@ -184,10 +184,15 @@ export function queueMessageEmbedding(
 }
 
 /**
- * Retrieval path for prompt assembly: embeds the current user query, runs a
- * sqlite-vec KNN search for similar past messages, and returns a trimmed
- * context string for injection into the chat system prompt. Returns `""` on
- * blank input, missing model, or any retrieval failure so inference still runs.
+ * On-demand retrieval for the `search_local_history` tool.
+ *
+ * Embeds the tool-provided `query`, runs a sqlite-vec KNN search for similar
+ * past messages, and returns a trimmed context block for Pass 2 injection via
+ * `CHAT_ANSWER_WITH_RAG_PROMPT`. Returns `""` on blank input, missing model, or
+ * any retrieval failure so the grounded answer pass can still run.
+ *
+ * Must not be called automatically on every user send — only when the LLM
+ * explicitly requests local history via tool calling.
  */
 export async function buildRagContextForQuery(query: string, traceId?: string): Promise<string> {
   const normalizedQuery = query.trim();
@@ -218,6 +223,7 @@ export async function buildRagContextForQuery(query: string, traceId?: string): 
       matchCount: similarMessages.length,
       contextLen: context.length,
       hasContext: context.length > 0,
+      query: normalizedQuery,
     });
     return context;
   } catch (error: unknown) {
