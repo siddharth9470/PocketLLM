@@ -8,6 +8,7 @@ import {
   stripToolCallTags,
   type WebSearchToolCall,
 } from "@/services/inference/toolCallParsing";
+import { appLogger, type ScopedLogger } from "@/services/logger";
 import { searchWeb, type WebSearchResult } from "@/services/tavilySearch";
 
 const COMPLETION_STOP_WORDS = [
@@ -23,7 +24,6 @@ const COMPLETION_STOP_WORDS = [
 ];
 
 const MAX_SEARCH_CONTEXT_CHARS = 3000;
-const LOG_PREFIX = "[chatCompletion]";
 
 /** Callback invoked with the accumulated assistant text on each streamed chunk. */
 type StreamTokenHandler = (accumulatedContent: string) => void;
@@ -54,6 +54,19 @@ export interface ChatCompletionResult {
 export interface ChatCompletionOptions {
   onSearching?: () => void;
   ragContext?: string;
+  /** Correlates LLM/tool logs with the originating Chat send trace. */
+  traceId?: string;
+}
+
+function pipelineLogs(traceId?: string): { llm: ScopedLogger; tool: ScopedLogger } {
+  if (!traceId) {
+    return { llm: appLogger.domain("LLM"), tool: appLogger.domain("Tool") };
+  }
+
+  return {
+    llm: appLogger.forTrace("LLM", traceId),
+    tool: appLogger.forTrace("Tool", traceId),
+  };
 }
 
 /**
@@ -73,15 +86,20 @@ export async function chatCompletion(
     throw new Error("Prompt is empty");
   }
 
+  const logs = pipelineLogs(options?.traceId);
   const webSearchEnabled = isTavilyConfigured();
-  console.log(`${LOG_PREFIX} Prompt:`, userPrompt);
-  console.log(`${LOG_PREFIX} Tool calling enabled:`, webSearchEnabled);
+  logs.llm.info("completion.started", {
+    promptLen: userPrompt.length,
+    toolsEnabled: webSearchEnabled,
+    hasRagContext: Boolean(options?.ragContext?.trim()),
+    promptPreview: userPrompt,
+  });
 
   if (webSearchEnabled) {
-    return generateReplyWithToolCalling(userPrompt, onToken, options);
+    return generateReplyWithToolCalling(userPrompt, onToken, options, logs);
   }
 
-  return generateDirectReply(userPrompt, onToken, options?.ragContext);
+  return generateDirectReply(userPrompt, onToken, options?.ragContext, logs.llm);
 }
 
 /**
@@ -92,8 +110,9 @@ async function generateReplyWithToolCalling(
   userPrompt: string,
   onToken?: StreamTokenHandler,
   options?: ChatCompletionOptions,
+  logs: { llm: ScopedLogger; tool: ScopedLogger } = pipelineLogs(),
 ): Promise<ChatCompletionResult> {
-  console.log(`${LOG_PREFIX} Pass 1: checking if model calls web_search`);
+  logs.llm.info("pass1.tool_selection.started");
 
   const uiStreamHandler = createUiStreamHandler(onToken);
   const toolSelectionResponse = await runModelCompletion(
@@ -104,11 +123,15 @@ async function generateReplyWithToolCalling(
   const webSearchRequest = resolveWebSearchToolCall(toolSelectionResponse, userPrompt);
 
   if (webSearchRequest) {
-    return generateGroundedReply(userPrompt, webSearchRequest, onToken, options);
+    logs.llm.info("pass1.tool_call_detected", { tool: "web_search", query: webSearchRequest.query });
+    return generateGroundedReply(userPrompt, webSearchRequest, onToken, options, logs);
   }
 
   const assistantMessageContent = toDisplayContent(readAssistantContent(toolSelectionResponse));
-  console.log(`${LOG_PREFIX} No tool call — direct answer:`, assistantMessageContent);
+  logs.llm.info("pass1.direct_answer", {
+    replyLen: assistantMessageContent.length,
+    replyPreview: assistantMessageContent,
+  });
 
   return buildChatCompletionResult(assistantMessageContent, toolSelectionResponse);
 }
@@ -120,8 +143,9 @@ async function generateDirectReply(
   userPrompt: string,
   onToken?: StreamTokenHandler,
   ragContext?: string,
+  llm: ScopedLogger = appLogger.domain("LLM"),
 ): Promise<ChatCompletionResult> {
-  console.log(`${LOG_PREFIX} Streaming direct answer (no tools configured)`);
+  llm.info("pass.direct.started");
 
   const directChatResponse = await runModelCompletion(
     buildConversationMessages(userPrompt, ragContext),
@@ -130,7 +154,10 @@ async function generateDirectReply(
   );
   const assistantMessageContent = toDisplayContent(readAssistantContent(directChatResponse));
 
-  console.log(`${LOG_PREFIX} Response:`, assistantMessageContent);
+  llm.info("pass.direct.completed", {
+    replyLen: assistantMessageContent.length,
+    replyPreview: assistantMessageContent,
+  });
   return buildChatCompletionResult(assistantMessageContent, directChatResponse);
 }
 
@@ -143,17 +170,22 @@ async function generateGroundedReply(
   webSearchRequest: WebSearchToolCall,
   onToken?: StreamTokenHandler,
   options?: ChatCompletionOptions,
+  logs: { llm: ScopedLogger; tool: ScopedLogger } = pipelineLogs(),
 ): Promise<ChatCompletionResult> {
   options?.onSearching?.();
 
   const searchQuery = userPrompt || webSearchRequest.query;
-  console.log(`${LOG_PREFIX} Model requested web_search:`, searchQuery);
+  logs.tool.info("web_search.started", { query: searchQuery });
 
-  const searchResult = await searchWeb(searchQuery);
-  assertSearchHasResults(searchResult);
+  const searchResult = await searchWeb(searchQuery, options?.traceId);
+  assertSearchHasResults(searchResult, logs.tool);
+  logs.tool.info("web_search.completed", {
+    resultCount: searchResult.resultCount,
+    hasAnswer: Boolean(searchResult.answer),
+  });
 
   const groundedSearchContext = buildSearchContext(searchResult);
-  console.log(`${LOG_PREFIX} Streaming final answer from llama.rn (pass 2)`);
+  logs.llm.info("pass2.grounded_answer.started", { contextLen: groundedSearchContext.length });
 
   try {
     const groundedAnswerResponse = await runModelCompletion(
@@ -167,13 +199,17 @@ async function generateGroundedReply(
     const displayContent = looksLikeTextToolCall(rawAssistantContent)
       ? assistantMessageContent
       : toDisplayContent(rawAssistantContent);
-    console.log(`${LOG_PREFIX} Final answer:`, displayContent);
+    logs.llm.info("pass2.grounded_answer.completed", {
+      replyLen: displayContent.length,
+      replyPreview: displayContent,
+    });
     return buildChatCompletionResult(displayContent, groundedAnswerResponse);
   } catch (error) {
-    console.error(`${LOG_PREFIX} Pass 2 failed, falling back to Tavily answer:`, error);
+    logs.llm.error("pass2.grounded_answer.failed", error);
 
     const fallbackAnswer = searchResult.answer ?? searchResult.formatted.slice(0, MAX_SEARCH_CONTEXT_CHARS);
     streamToken(onToken, fallbackAnswer);
+    logs.tool.warn("web_search.fallback_answer", { replyLen: fallbackAnswer.length });
     return { text: fallbackAnswer };
   }
 }
@@ -250,9 +286,9 @@ function buildSearchContext(searchResult: WebSearchResult): string {
 }
 
 /** Throws when Tavily returns neither an answer nor any results. */
-function assertSearchHasResults(searchResult: WebSearchResult): void {
+function assertSearchHasResults(searchResult: WebSearchResult, tool: ScopedLogger = appLogger.domain("Tool")): void {
   if (searchResult.resultCount === 0 && !searchResult.answer) {
-    console.error(`${LOG_PREFIX} Tavily returned no results`);
+    tool.error("web_search.empty_results");
     throw new Error("Web search returned no results.");
   }
 }

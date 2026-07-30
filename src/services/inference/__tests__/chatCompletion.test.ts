@@ -157,7 +157,7 @@ describe("chatCompletion", () => {
 
       const result = await chatCompletion(USER_PROMPT);
 
-      expect(searchWeb).toHaveBeenCalledWith(USER_PROMPT);
+      expect(searchWeb).toHaveBeenCalledWith(USER_PROMPT, undefined);
       expect(completion).toHaveBeenCalledTimes(2);
       expect(lastCompletionParams(completion).force_pure_content).toBe(true);
       expect(result.text).toBe("Cursor Pro is $20/month.");

@@ -9,6 +9,7 @@ import {
 } from "@/constants/rag";
 import { ensureDatabaseReady } from "@/db";
 import { saveMessageEmbedding, searchSimilarMessages } from "@/db/ChatDB";
+import { appLogger } from "@/services/logger";
 import type { ChatMessage } from "@/types/chat";
 
 let isExecutorchInitialized = false;
@@ -151,27 +152,34 @@ export function queueMessageEmbedding(
   conversationId: string,
   role: ChatMessage["role"],
   text: string,
+  traceId?: string,
 ): void {
   const normalizedText = text.trim();
   if (!normalizedText) {
     return;
   }
 
+  const rag = traceId ? appLogger.forTrace("RAG", traceId) : appLogger.domain("RAG");
+  rag.info("embed.queued", { messageId, conversationId, role, textLen: normalizedText.length });
+
   void (async () => {
     await ensureDatabaseReady();
     const loadedModule = await ensureEmbeddingModelReady();
     if (!loadedModule) {
+      rag.warn("embed.skipped_model_unavailable", { messageId });
       return;
     }
 
     const embedding = await embedText(normalizedText);
     if (!embedding) {
+      rag.warn("embed.skipped_empty_vector", { messageId });
       return;
     }
 
     await saveMessageEmbedding(messageId, conversationId, role, embedding);
+    rag.info("embed.stored", { messageId, vectorLen: embedding.length });
   })().catch((error: unknown) => {
-    console.error(`Failed to embed message ${messageId}:`, error);
+    rag.error("embed.failed", error, { messageId });
   });
 }
 
@@ -181,29 +189,39 @@ export function queueMessageEmbedding(
  * context string for injection into the chat system prompt. Returns `""` on
  * blank input, missing model, or any retrieval failure so inference still runs.
  */
-export async function buildRagContextForQuery(query: string): Promise<string> {
+export async function buildRagContextForQuery(query: string, traceId?: string): Promise<string> {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) {
     return "";
   }
+
+  const rag = traceId ? appLogger.forTrace("RAG", traceId) : appLogger.domain("RAG");
 
   try {
     await ensureDatabaseReady();
 
     const loadedModule = await ensureEmbeddingModelReady();
     if (!loadedModule) {
+      rag.warn("retrieve.skipped_model_unavailable");
       return "";
     }
 
     const queryEmbedding = await embedText(normalizedQuery);
     if (!queryEmbedding) {
+      rag.warn("retrieve.skipped_empty_query_vector");
       return "";
     }
 
     const similarMessages = await searchSimilarMessages(queryEmbedding, RAG_SIMILAR_MESSAGE_LIMIT);
-    return buildRagContextBlock(similarMessages);
+    const context = buildRagContextBlock(similarMessages);
+    rag.info("retrieve.assembled", {
+      matchCount: similarMessages.length,
+      contextLen: context.length,
+      hasContext: context.length > 0,
+    });
+    return context;
   } catch (error: unknown) {
-    console.error("Failed to build RAG context:", error);
+    rag.error("retrieve.failed", error, { queryLen: normalizedQuery.length });
     return "";
   }
 }
@@ -232,7 +250,7 @@ export async function verifyEmbeddingPipelineOnDevice(): Promise<boolean> {
     await searchSimilarMessages(embedding, 1);
     return true;
   } catch (error: unknown) {
-    console.error("Embedding pipeline smoke test failed:", error);
+    appLogger.domain("RAG").error("smoke_test.failed", error);
     return false;
   }
 }

@@ -1,4 +1,5 @@
 import { getTavilyApiKey } from "@/config/env";
+import { appLogger } from "@/services/logger";
 
 /** https://docs.tavily.com/api-reference/endpoint/search */
 const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
@@ -38,13 +39,14 @@ function formatSearchResults(data: TavilySearchResponse): string {
   return parts.length > 0 ? parts.join("\n\n") : "No results found.";
 }
 
-export async function searchWeb(query: string): Promise<WebSearchResult> {
+export async function searchWeb(query: string, traceId?: string): Promise<WebSearchResult> {
+  const tool = traceId ? appLogger.forTrace("Tool", traceId) : appLogger.domain("Tool");
   const apiKey = getTavilyApiKey();
   if (!apiKey) {
     throw new Error("Tavily API key is not configured.");
   }
 
-  console.log("[tavilySearch] Query:", query);
+  tool.info("tavily.request", { query });
 
   const response = await fetch(TAVILY_SEARCH_URL, {
     method: "POST",
@@ -60,7 +62,10 @@ export async function searchWeb(query: string): Promise<WebSearchResult> {
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("[tavilySearch] Request failed:", response.status, errorText);
+    tool.error("tavily.request_failed", undefined, {
+      status: response.status,
+      bodyPreview: errorText.slice(0, 120),
+    });
     throw new Error(`Web search failed (${response.status}).`);
   }
 
@@ -69,7 +74,11 @@ export async function searchWeb(query: string): Promise<WebSearchResult> {
   const answer = data.answer?.trim() ?? null;
   const resultCount = data.results?.length ?? 0;
 
-  console.log("[tavilySearch] Done:", answer ? `answer="${answer}"` : "no answer", `| results=${resultCount}`);
+  tool.info("tavily.response", {
+    resultCount,
+    hasAnswer: Boolean(answer),
+    responseTimeMs: data.response_time ?? null,
+  });
 
   return { answer, formatted, resultCount };
 }

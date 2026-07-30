@@ -23,6 +23,7 @@ import {
   updateConversation,
 } from "@/db/ChatDB";
 import { chatCompletion, initializeModel, resolveDownloadedModelPath } from "@/services/chatHelper";
+import { appLogger } from "@/services/logger";
 import { buildRagContextForQuery, queueMessageEmbedding } from "@/services/ragService";
 import type { ChatMessage, Conversation } from "@/types/chat";
 import { deriveConversationTitle, generateChatId } from "@/utils/chatIds";
@@ -310,7 +311,17 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       const assistantMessageId = generateChatId();
       const streamingAssistantMessage = buildStreamingAssistantMessage(conversationId, assistantMessageId);
 
+      const chatTrace = appLogger.startTrace("Chat", {
+        conversationId,
+        userMessageId: userMessage.id,
+        assistantMessageId,
+        modelId: options.modelId,
+        promptLen: messageText.length,
+        promptPreview: messageText,
+      });
+
       setIsSending(true);
+      chatTrace.info("send.started");
 
       if (isConversationFocused(conversationId)) {
         setConversationDetails((prev) => {
@@ -343,6 +354,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
             updatedAt: now,
             messages: [],
           });
+          chatTrace.info("conversation.created", { title });
         } else {
           await updateConversation(conversationId, {
             modelId: options.modelId,
@@ -352,8 +364,10 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
         await createMessage(userMessage);
         await updateConversation(conversationId, { preview: messageText, updatedAt: now });
-        queueMessageEmbedding(userMessage.id, conversationId, userMessage.role, userMessage.content);
+        queueMessageEmbedding(userMessage.id, conversationId, userMessage.role, userMessage.content, chatTrace.traceId);
+        chatTrace.info("user.persisted", { messageId: userMessage.id });
       } catch (error) {
+        chatTrace.error("user.persist_failed", error);
         console.error("Failed to persist user message:", error);
         options.onSendError?.(ChatScreenLabels.INFERENCE_FAILED);
         setIsSending(false);
@@ -371,13 +385,16 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       };
 
       try {
+        chatTrace.info("model.loading", { modelId: options.modelId });
         const modelPath = await resolveDownloadedModelPath(options.modelId);
         if (!modelPath) {
           throw new Error(ChatScreenLabels.MODEL_UNAVAILABLE);
         }
 
         await initializeModel(modelPath);
+        chatTrace.info("model.ready");
       } catch (error) {
+        chatTrace.error("model.load_failed", error);
         console.error("Failed to load model for inference:", error);
         options.onSendError?.(error instanceof Error ? error.message : ChatScreenLabels.MODEL_INIT_FAILED);
         removeStreamingAssistantFromUi();
@@ -386,7 +403,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const ragContext = await buildRagContextForQuery(messageText);
+        const ragContext = await buildRagContextForQuery(messageText, chatTrace.traceId);
 
         const completionResult = await chatCompletion(
           messageText,
@@ -401,6 +418,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           },
           {
             ragContext,
+            traceId: chatTrace.traceId,
             onSearching: () => {
               if (!isConversationFocused(conversationId)) {
                 return;
@@ -418,13 +436,28 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           },
         );
 
+        chatTrace.info("inference.completed", {
+          replyLen: completionResult.text.length,
+          tokensPerSecond: completionResult.metrics?.tokensPerSecond ?? null,
+        });
+
         const assistantMessage: ChatMessage = {
           ...buildAssistantMessage(conversationId, completionResult.text, assistantMessageId),
           metrics: completionResult.metrics,
         };
 
         await createMessage(assistantMessage);
-        queueMessageEmbedding(assistantMessage.id, conversationId, assistantMessage.role, assistantMessage.content);
+        queueMessageEmbedding(
+          assistantMessage.id,
+          conversationId,
+          assistantMessage.role,
+          assistantMessage.content,
+          chatTrace.traceId,
+        );
+        chatTrace.info("assistant.persisted", {
+          messageId: assistantMessage.id,
+          replyPreview: completionResult.text,
+        });
 
         const responseTimestamp = new Date().toISOString();
         await updateConversation(conversationId, {
@@ -452,7 +485,9 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         }
 
         void refreshConversations();
+        chatTrace.info("send.completed");
       } catch (error) {
+        chatTrace.error("send.failed", error);
         console.error("Failed to generate assistant message:", error);
         options.onSendError?.(ChatScreenLabels.INFERENCE_FAILED);
 

@@ -25,6 +25,7 @@ describe("searchWeb", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.spyOn(console, "log").mockImplementation(() => undefined);
+    jest.spyOn(console, "info").mockImplementation(() => undefined);
     jest.spyOn(console, "error").mockImplementation(() => undefined);
     jest.mocked(getTavilyApiKey).mockReturnValue(MOCK_API_KEY);
   });
