@@ -1,7 +1,7 @@
 import { ANDROID_DATABASE_PATH, type DB, IOS_LIBRARY_PATH, open } from "@op-engineering/op-sqlite";
 import { Platform } from "react-native";
 
-import { EMBEDDING_DIMENSION, EMBEDDING_MODEL_ID } from "@/constants/rag";
+import { EMBEDDING_DIMENSION, EMBEDDING_MODEL_ID, RAG_SIMILAR_MESSAGE_LIMIT } from "@/constants/rag";
 import type { ChatMessage, ChatMessageAttachment, Conversation } from "@/types/chat";
 
 const MESSAGE_EMBEDDINGS_DELETE_SQL = "DELETE FROM message_embeddings WHERE message_id = ?;";
@@ -604,7 +604,10 @@ class ChatDatabaseManager {
     ]);
   }
 
-  public async searchSimilarMessages(queryEmbedding: Float32Array, limit = 4): Promise<ChatMessage[]> {
+  public async searchSimilarMessages(
+    queryEmbedding: Float32Array,
+    limit = RAG_SIMILAR_MESSAGE_LIMIT,
+  ): Promise<ChatMessage[]> {
     const connection = this.getDatabaseConnection();
 
     if (queryEmbedding.length !== EMBEDDING_DIMENSION) {
@@ -701,6 +704,9 @@ export async function saveMessageEmbedding(
   return chatDb.saveMessageEmbedding(messageId, conversationId, role, embedding);
 }
 
-export async function searchSimilarMessages(queryEmbedding: Float32Array, limit = 4): Promise<ChatMessage[]> {
+export async function searchSimilarMessages(
+  queryEmbedding: Float32Array,
+  limit = RAG_SIMILAR_MESSAGE_LIMIT,
+): Promise<ChatMessage[]> {
   return chatDb.searchSimilarMessages(queryEmbedding, limit);
 }
