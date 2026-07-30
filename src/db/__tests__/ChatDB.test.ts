@@ -314,8 +314,9 @@ describe("ChatDB", () => {
         .map(([sql]) => String(sql))
         .filter((sql) => sql.startsWith("DELETE FROM"));
 
-      expect(deleteOrder[0]).toContain("DELETE FROM chat_messages");
-      expect(deleteOrder[1]).toContain("DELETE FROM conversations");
+      expect(deleteOrder[0]).toContain("DELETE FROM message_embeddings");
+      expect(deleteOrder[1]).toContain("DELETE FROM chat_messages");
+      expect(deleteOrder[2]).toContain("DELETE FROM conversations");
     });
   });
 });

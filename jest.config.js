@@ -6,6 +6,8 @@ module.exports = {
   moduleNameMapper: {
     "^@tests/(.*)$": "<rootDir>/__tests__/$1",
     "^@/(.*)$": "<rootDir>/src/$1",
+    "^react-native-executorch-expo-resource-fetcher$":
+      "<rootDir>/node_modules/react-native-executorch-expo-resource-fetcher/lib/index.js",
   },
   transformIgnorePatterns: [
     "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|native-base|react-native-svg|@tanstack/.*|zod)",

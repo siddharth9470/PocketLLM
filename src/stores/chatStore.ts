@@ -23,6 +23,8 @@ import {
   updateConversation,
 } from "@/db/ChatDB";
 import { chatCompletion, initializeModel, resolveDownloadedModelPath } from "@/services/chatHelper";
+import { ragDebug } from "@/services/rag/ragDebug";
+import { buildRagContextForQuery, queueMessageEmbedding } from "@/services/rag/ragRetrieval";
 import type { ChatMessage, Conversation } from "@/types/chat";
 import { deriveConversationTitle, generateChatId } from "@/utils/chatIds";
 import { buildConversationPreview } from "@/utils/conversationPreview";
@@ -351,6 +353,13 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
         await createMessage(userMessage);
         await updateConversation(conversationId, { preview: messageText, updatedAt: now });
+        ragDebug("User message captured for RAG ingestion", {
+          messageId: userMessage.id,
+          role: userMessage.role,
+          conversationId,
+          contentLength: userMessage.content.length,
+        });
+        queueMessageEmbedding(userMessage.id, conversationId, userMessage.role, userMessage.content);
       } catch (error) {
         console.error("Failed to persist user message:", error);
         options.onSendError?.(ChatScreenLabels.INFERENCE_FAILED);
@@ -384,6 +393,12 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       }
 
       try {
+        ragDebug("Triggering RAG context retrieval for user query", {
+          conversationId,
+          queryLength: messageText.length,
+        });
+        const ragContext = await buildRagContextForQuery(messageText);
+
         const completionResult = await chatCompletion(
           messageText,
           (accumulatedText) => {
@@ -396,6 +411,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
             );
           },
           {
+            ragContext,
             onSearching: () => {
               if (!isConversationFocused(conversationId)) {
                 return;
@@ -419,6 +435,13 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
         };
 
         await createMessage(assistantMessage);
+        ragDebug("Assistant response captured for RAG ingestion", {
+          messageId: assistantMessage.id,
+          role: assistantMessage.role,
+          conversationId,
+          contentLength: assistantMessage.content.length,
+        });
+        queueMessageEmbedding(assistantMessage.id, conversationId, assistantMessage.role, assistantMessage.content);
 
         const responseTimestamp = new Date().toISOString();
         await updateConversation(conversationId, {

@@ -10,6 +10,9 @@ import { CUSTOM_FONT_ASSETS } from "@/constants/fonts";
 import { colors } from "@/constants/theme";
 import { initializeAllDatabases } from "@/db";
 import CentralNavigator from "@/navigation/CentralNavigator";
+import { prewarmEmbeddingModel } from "@/services/embeddings/embeddingService";
+import { initializeExecutorch } from "@/services/embeddings/executorchBootstrap";
+import { verifyEmbeddingPipelineOnDevice } from "@/services/rag/ragRetrieval";
 import { ChatStoreProvider } from "@/stores/chatStore";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 
@@ -28,8 +31,20 @@ export default function App() {
 
   useEffect(() => {
     logTavilyConfigStatus();
+    initializeExecutorch();
 
     initializeAllDatabases()
+      .then(async () => {
+        const isEmbeddingReady = await prewarmEmbeddingModel();
+        if (!isEmbeddingReady) {
+          console.warn("[RAG] Embedding model prewarm skipped — RAG will degrade gracefully.");
+        }
+
+        if (__DEV__) {
+          const pipelineVerified = await verifyEmbeddingPipelineOnDevice();
+          console.log(`[RAG] Pipeline smoke test: ${pipelineVerified ? "passed" : "failed"}`);
+        }
+      })
       .then(() => setIsDbReady(true))
       .catch((error) => {
         console.error("Failed to initialize databases:", error);

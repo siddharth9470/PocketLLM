@@ -129,6 +129,14 @@ export function buildHuggingFaceModelsQuery(
 
 export const mockExecute = jest.fn().mockResolvedValue({ rows: [], rowsAffected: 1 });
 
+export const mockExecuteSync = jest.fn((query: string) => {
+  if (String(query).includes("sqlite_master")) {
+    return { rows: [{ sql: null }], rowsAffected: 0 };
+  }
+
+  return { rows: [], rowsAffected: 1 };
+});
+
 /**
  * Builds a llama.rn `NativeCompletionResult` for inference tests.
  *

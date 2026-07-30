@@ -12,12 +12,13 @@ jest.mock("@react-native-async-storage/async-storage", () =>
 );
 
 jest.mock("@op-engineering/op-sqlite", () => {
-  const { mockExecute } = require("@tests/testUtils");
+  const { mockExecute, mockExecuteSync } = require("@tests/testUtils");
   return {
     ANDROID_DATABASE_PATH: "/mock/android/db",
     IOS_LIBRARY_PATH: "/mock/ios/db",
     open: jest.fn(() => ({
       execute: mockExecute,
+      executeSync: mockExecuteSync,
       close: jest.fn(),
     })),
   };
@@ -113,3 +114,37 @@ jest.mock("react-native-device-info", () => ({
   supportedAbis: jest.fn().mockResolvedValue(["arm64-v8a"]),
   getHardware: jest.fn().mockResolvedValue("mock-hardware"),
 }));
+
+jest.mock("react-native-executorch-expo-resource-fetcher", () => ({
+  ExpoResourceFetcher: {
+    fetch: jest.fn().mockResolvedValue({ paths: ["/mock/model.pte"], wasDownloaded: [false] }),
+    readAsString: jest.fn().mockResolvedValue("{}"),
+  },
+}));
+
+jest.mock("react-native-executorch", () => {
+  const { EMBEDDING_DIMENSION } = require("@/constants/rag");
+
+  const createDeterministicEmbedding = (text: string): Float32Array => {
+    const vector = new Float32Array(EMBEDDING_DIMENSION);
+    for (let index = 0; index < EMBEDDING_DIMENSION; index += 1) {
+      vector[index] = ((text.charCodeAt(index % text.length) || 1) + index) / 1000;
+    }
+    return vector;
+  };
+
+  return {
+    ALL_MINILM_L6_V2: {
+      modelName: "all_minilm_l6_v2",
+      modelSource: "mock-model",
+      tokenizerSource: "mock-tokenizer",
+    },
+    initExecutorch: jest.fn(),
+    isAvailable: true,
+    TextEmbeddingsModule: {
+      fromModelName: jest.fn().mockResolvedValue({
+        forward: jest.fn(async (text: string) => createDeterministicEmbedding(text)),
+      }),
+    },
+  };
+});

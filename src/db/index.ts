@@ -54,6 +54,16 @@ export const initializeAllDatabases = async (): Promise<void> => {
   }
 };
 
+let databaseReadyPromise: Promise<void> | null = null;
+
+/** Starts DB initialization once and returns the shared promise for callers that need persistence. */
+export function ensureDatabaseReady(): Promise<void> {
+  if (!databaseReadyPromise) {
+    databaseReadyPromise = initializeAllDatabases();
+  }
+  return databaseReadyPromise;
+}
+
 const getCryptoHardwareKey = async (): Promise<{ hardwareKey: string; isNewVault: boolean }> => {
   try {
     let hardwareKey = await SecureStore.getItemAsync(VAULT_KEY_NAME);

@@ -53,6 +53,7 @@ export interface ChatCompletionResult {
 
 export interface ChatCompletionOptions {
   onSearching?: () => void;
+  ragContext?: string;
 }
 
 /**
@@ -80,7 +81,7 @@ export async function chatCompletion(
     return generateReplyWithToolCalling(userPrompt, onToken, options);
   }
 
-  return generateDirectReply(userPrompt, onToken);
+  return generateDirectReply(userPrompt, onToken, options?.ragContext);
 }
 
 /**
@@ -96,7 +97,7 @@ async function generateReplyWithToolCalling(
 
   const uiStreamHandler = createUiStreamHandler(onToken);
   const toolSelectionResponse = await runModelCompletion(
-    buildConversationMessages(userPrompt),
+    buildConversationMessages(userPrompt, options?.ragContext),
     "toolSelection",
     uiStreamHandler,
   );
@@ -115,11 +116,15 @@ async function generateReplyWithToolCalling(
 /**
  * Single-pass reply when web search is unavailable. Tokens stream via `onToken`.
  */
-async function generateDirectReply(userPrompt: string, onToken?: StreamTokenHandler): Promise<ChatCompletionResult> {
+async function generateDirectReply(
+  userPrompt: string,
+  onToken?: StreamTokenHandler,
+  ragContext?: string,
+): Promise<ChatCompletionResult> {
   console.log(`${LOG_PREFIX} Streaming direct answer (no tools configured)`);
 
   const directChatResponse = await runModelCompletion(
-    buildConversationMessages(userPrompt),
+    buildConversationMessages(userPrompt, ragContext),
     "directChat",
     createUiStreamHandler(onToken),
   );
@@ -211,9 +216,12 @@ function buildCompletionParams(messages: ChatCompletionMessage[], purpose: Compl
 }
 
 /** System + user messages for the tool-selection pass or a direct chat reply. */
-function buildConversationMessages(userPrompt: string): ChatCompletionMessage[] {
+function buildConversationMessages(userPrompt: string, ragContext?: string): ChatCompletionMessage[] {
+  const trimmedRagContext = ragContext?.trim();
+  const systemContent = trimmedRagContext ? `${CHAT_SYSTEM_PROMPT}\n\n${trimmedRagContext}` : CHAT_SYSTEM_PROMPT;
+
   return [
-    { role: "system", content: CHAT_SYSTEM_PROMPT },
+    { role: "system", content: systemContent },
     { role: "user", content: userPrompt },
   ];
 }
