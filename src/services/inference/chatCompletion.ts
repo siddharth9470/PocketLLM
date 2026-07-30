@@ -13,6 +13,7 @@ import {
   type ChatToolCall,
   looksLikeTextToolCall,
   mayContainToolSyntax,
+  readCompletionRawText,
   resolveChatToolCall,
   stripToolCallTags,
 } from "@/services/inference/toolCallParsing";
@@ -149,6 +150,16 @@ async function generateReplyWithToolCalling(
     createStreamHandler(onToken, "guarded"),
     logs.llm,
   );
+
+  // Temporary debug visibility: dump the unparsed Pass 1 payload before any tool parsing.
+  const rawPass1Output = readCompletionRawText(toolSelectionResponse);
+  logs.llm.info("pass1.raw_output", {
+    rawOutputPreview: rawPass1Output.length > 0 ? rawPass1Output : "(empty)",
+    contentLen: (toolSelectionResponse.content ?? "").length,
+    textLen: (toolSelectionResponse.text ?? "").length,
+    structuredToolCalls: toolSelectionResponse.tool_calls?.length ?? 0,
+  });
+
   const toolCall = resolveChatToolCall(toolSelectionResponse, userPrompt);
 
   if (toolCall?.name === "web_search") {

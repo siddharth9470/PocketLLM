@@ -105,6 +105,47 @@ describe("resolveChatToolCall", () => {
       });
     });
 
+    it("resolves search_local_history inside a markdown json fence", () => {
+      const result = buildCompletionResult({
+        content: [
+          "I'll look that up.",
+          "```json",
+          '{"name":"search_local_history","arguments":{"query":"favorite color"}}',
+          "```",
+        ].join("\n"),
+      });
+
+      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toEqual({
+        name: "search_local_history",
+        query: "favorite color",
+        source: "text",
+      });
+    });
+
+    it("resolves XML-style search_local_history parameter blocks", () => {
+      const result = buildCompletionResult({
+        content: '<tool_call>search_local_history<parameter name="query">favorite color</parameter></tool_call>',
+      });
+
+      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toEqual({
+        name: "search_local_history",
+        query: "favorite color",
+        source: "text",
+      });
+    });
+
+    it("resolves lightly unquoted JSON tool arguments", () => {
+      const result = buildCompletionResult({
+        content: '{name: "search_local_history", arguments: {query: "prior decision"}}',
+      });
+
+      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toEqual({
+        name: "search_local_history",
+        query: "prior decision",
+        source: "text",
+      });
+    });
+
     it("falls back to the user prompt when the query cannot be extracted (PARSE-04)", () => {
       const result = buildCompletionResult({ content: "<|tool_call|>call:web_search{ malformed }" });
 

@@ -33,9 +33,20 @@ export function mayContainToolSyntax(text: string): boolean {
     text.includes("<function") ||
     text.includes("call:web") ||
     text.includes("call:search") ||
+    text.includes("```") ||
     text.includes('"web_search"') ||
-    text.includes('"search_local_history"')
+    text.includes('"search_local_history"') ||
+    text.includes("web_search") ||
+    text.includes("search_local_history")
   );
+}
+
+/**
+ * Returns the raw Pass 1 model text (`content` + `text`) for debug logging
+ * before any tool-call parsing runs.
+ */
+export function readCompletionRawText(result: NativeCompletionResult): string {
+  return joinResultText(result);
 }
 
 /**
@@ -44,8 +55,9 @@ export function mayContainToolSyntax(text: string): boolean {
  *
  * Resolution order (LLM structured output only — never user-prompt heuristics):
  * 1. Native `tool_calls[]` from llama.rn
- * 2. Plain JSON objects (`{ name, arguments }` / `{ name, query }` / `{ tool, query }`)
- * 3. Inline text tool-call markup (`call:search_local_history{...}`, `<|tool_call|>`, etc.)
+ * 2. JSON objects (optionally wrapped in markdown fences / prose)
+ * 3. XML-style `<tool_call>` / `<parameter name="query">` blocks
+ * 4. Inline text tool-call markup (`call:search_local_history{...}`, etc.)
  *
  * When a tool name is found but the query cannot be parsed, falls back to
  * `fallbackQuery` (the original user prompt).
@@ -63,17 +75,24 @@ export function resolveChatToolCall(result: NativeCompletionResult, fallbackQuer
     return null;
   }
 
-  const plainJsonCall = readPlainJsonToolCall(rawText, fallback);
-  if (plainJsonCall) {
-    return plainJsonCall;
+  const normalizedText = normalizeToolCallText(rawText);
+
+  const jsonCall = readJsonToolCallFromText(normalizedText, fallback);
+  if (jsonCall) {
+    return jsonCall;
   }
 
-  const textToolName = detectInlineToolName(rawText);
+  const xmlCall = readXmlStyleToolCall(normalizedText, fallback);
+  if (xmlCall) {
+    return xmlCall;
+  }
+
+  const textToolName = detectInlineToolName(normalizedText);
   if (!textToolName) {
     return null;
   }
 
-  const query = readInlineToolQuery(rawText) ?? fallback;
+  const query = readInlineToolQuery(normalizedText) ?? extractQueryByScan(normalizedText) ?? fallback;
   return query.length > 0 ? { name: textToolName, query, source: "text" } : null;
 }
 
@@ -92,11 +111,12 @@ export function looksLikeTextToolCall(text: string): boolean {
     return false;
   }
 
-  if (detectInlineToolName(text)) {
+  const normalized = normalizeToolCallText(text);
+  if (detectInlineToolName(normalized)) {
     return true;
   }
 
-  return readPlainJsonToolCall(text, "") !== null;
+  return readJsonToolCallFromText(normalized, "") !== null || readXmlStyleToolCall(normalized, "") !== null;
 }
 
 /**
@@ -115,6 +135,7 @@ export function stripToolCallTags(raw: string): string {
   let result = raw;
   let removedToolSyntax = false;
   const markers = [
+    "```",
     "<|tool_call|>",
     "<tool_call>",
     "<function=web",
@@ -141,6 +162,32 @@ function joinResultText(result: NativeCompletionResult): string {
 }
 
 /**
+ * Normalizes Gemma quote tokens and unwraps markdown ``` / ```json fences so
+ * downstream JSON/XML parsers see a flat tool-call payload.
+ */
+function normalizeToolCallText(rawText: string): string {
+  const withQuotes = rawText.split(GEMMA_QUOTE_TOKEN).join('"');
+  return stripMarkdownFences(withQuotes).trim();
+}
+
+/**
+ * Unwraps a fenced code block (```json ... ``` or ``` ... ```) when present.
+ * Uses index scanning only — no regex. Returns the original text when no fence exists.
+ */
+function stripMarkdownFences(text: string): string {
+  const fenceOpen = text.indexOf("```");
+  if (fenceOpen === -1) {
+    return text;
+  }
+
+  const afterTicks = text.slice(fenceOpen + 3);
+  const newlineIndex = afterTicks.indexOf("\n");
+  const body = newlineIndex === -1 ? afterTicks : afterTicks.slice(newlineIndex + 1);
+  const fenceClose = body.lastIndexOf("```");
+  return (fenceClose === -1 ? body : body.slice(0, fenceClose)).trim();
+}
+
+/**
  * Reads the first structured `tool_calls` entry whose function name is a known
  * chat tool. Uses `fallbackQuery` when arguments JSON has no usable query.
  */
@@ -150,28 +197,29 @@ function readStructuredToolCall(result: NativeCompletionResult, fallbackQuery: s
     return null;
   }
 
-  const query = readQueryFromArgumentsJson(knownCall.function.arguments) ?? fallbackQuery;
+  const query =
+    readQueryFromArgumentsJson(knownCall.function.arguments) ??
+    extractQueryByScan(knownCall.function.arguments) ??
+    fallbackQuery;
   return query.length > 0 ? { name: knownCall.function.name, query, source: "structured" } : null;
 }
 
 /**
- * Parses a plain JSON tool-call object emitted as model content, e.g.:
- * `{ "name": "search_local_history", "arguments": { "query": "..." } }`
- * `{ "name": "search_local_history", "query": "..." }`
- * `{ "tool": "web_search", "query": "..." }`
+ * Parses a JSON tool-call object from model text, including payloads that sit
+ * inside prose or markdown fences (fence already stripped by normalize).
+ * Accepts `{ name, arguments }`, `{ name, query }`, and `{ tool, query }`.
  */
-function readPlainJsonToolCall(rawText: string, fallbackQuery: string): ChatToolCall | null {
-  const trimmed = rawText.trim();
-  if (!trimmed.startsWith("{") || !mayContainToolSyntax(trimmed)) {
+function readJsonToolCallFromText(rawText: string, fallbackQuery: string): ChatToolCall | null {
+  if (!containsKnownToolName(rawText)) {
     return null;
   }
 
-  const argumentsJson = extractJsonObject(trimmed);
+  const argumentsJson = extractJsonObject(rawText);
   if (!argumentsJson) {
     return null;
   }
 
-  const parsed = parseJsonObject(argumentsJson);
+  const parsed = parseJsonObject(argumentsJson) ?? parseLooseObjectLiteral(argumentsJson);
   if (!parsed) {
     return null;
   }
@@ -181,23 +229,98 @@ function readPlainJsonToolCall(rawText: string, fallbackQuery: string): ChatTool
     return null;
   }
 
-  const query = extractQueryFromObject(parsed) ?? fallbackQuery;
+  const query = extractQueryFromObject(parsed) ?? extractQueryByScan(argumentsJson) ?? fallbackQuery;
   return query.length > 0 ? { name, query, source: "text" } : null;
 }
 
 /**
- * Detects a known tool name next to inline tool-call markup
- * (`tool_call`, `call:`, `<function=`). Prefers `search_local_history` when both
- * names appear because it is the longer, more specific token.
+ * Parses XML-ish Gemma/Hermes tool calls, e.g.:
+ * `<tool_call>search_local_history<parameter name="query">color</parameter></tool_call>`
+ * or `<function=search_local_history>{"query":"..."}`.
  */
-function detectInlineToolName(text: string): ChatToolName | null {
-  const lowerText = text.toLowerCase();
-  const hasToolSyntax =
-    lowerText.includes("tool_call") || lowerText.includes("call:") || lowerText.includes("<function=");
-  if (!hasToolSyntax) {
+function readXmlStyleToolCall(rawText: string, fallbackQuery: string): ChatToolCall | null {
+  const lowerText = rawText.toLowerCase();
+  const hasXmlSyntax =
+    lowerText.includes("<tool_call") || lowerText.includes("<function") || lowerText.includes("<parameter");
+  if (!hasXmlSyntax) {
     return null;
   }
 
+  const name = detectToolNameToken(rawText);
+  if (!name) {
+    return null;
+  }
+
+  const parameterQuery = readXmlParameterQuery(rawText);
+  if (parameterQuery) {
+    return { name, query: parameterQuery, source: "text" };
+  }
+
+  const jsonQuery = readInlineToolQuery(rawText) ?? extractQueryByScan(rawText);
+  const query = jsonQuery ?? fallbackQuery;
+  return query.length > 0 ? { name, query, source: "text" } : null;
+}
+
+/** Reads `<parameter name="query">...</parameter>` without regex. */
+function readXmlParameterQuery(rawText: string): string | null {
+  const lowerText = rawText.toLowerCase();
+  const markers = ['name="query"', "name='query'", "name=query"] as const;
+
+  for (const marker of markers) {
+    const markerIndex = lowerText.indexOf(marker);
+    if (markerIndex === -1) {
+      continue;
+    }
+
+    const afterMarker = rawText.slice(markerIndex + marker.length);
+    const openTagEnd = afterMarker.indexOf(">");
+    if (openTagEnd === -1) {
+      continue;
+    }
+
+    const valueStart = openTagEnd + 1;
+    const closeIndex = afterMarker.toLowerCase().indexOf("</parameter>");
+    if (closeIndex > valueStart) {
+      const value = afterMarker.slice(valueStart, closeIndex).trim();
+      if (value.length > 0) {
+        return value;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Detects a known tool name next to inline tool-call markup
+ * (`tool_call`, `call:`, `<function=`, `tool(`). Prefers `search_local_history`
+ * when both names appear because it is the longer, more specific token.
+ */
+function detectInlineToolName(text: string): ChatToolName | null {
+  const lowerText = text.toLowerCase();
+  if (!hasToolInvocationSyntax(lowerText)) {
+    return null;
+  }
+
+  return detectToolNameToken(text);
+}
+
+function hasToolInvocationSyntax(lowerText: string): boolean {
+  return (
+    lowerText.includes("tool_call") ||
+    lowerText.includes("call:") ||
+    lowerText.includes("call ") ||
+    lowerText.includes("<function") ||
+    lowerText.includes("<parameter") ||
+    lowerText.includes("search_local_history(") ||
+    lowerText.includes("web_search(") ||
+    lowerText.includes('"name"') ||
+    lowerText.includes("'name'")
+  );
+}
+
+function detectToolNameToken(text: string): ChatToolName | null {
+  const lowerText = text.toLowerCase();
   if (lowerText.includes(LOCAL_SEARCH_TOOL_NAME)) {
     return LOCAL_SEARCH_TOOL_NAME;
   }
@@ -209,10 +332,18 @@ function detectInlineToolName(text: string): ChatToolName | null {
   return null;
 }
 
+function containsKnownToolName(text: string): boolean {
+  return detectToolNameToken(text) !== null;
+}
+
 /** Reads the query from an inline tool call by parsing its embedded JSON argument object. */
 function readInlineToolQuery(rawText: string): string | null {
   const argumentsJson = extractJsonObject(rawText);
-  return argumentsJson ? readQueryFromArgumentsJson(argumentsJson) : null;
+  if (!argumentsJson) {
+    return null;
+  }
+
+  return readQueryFromArgumentsJson(argumentsJson) ?? extractQueryByScan(argumentsJson);
 }
 
 /**
@@ -221,7 +352,7 @@ function readInlineToolQuery(rawText: string): string | null {
  * stringified `arguments` payloads. Gemma quote tokens are normalized first.
  */
 function readQueryFromArgumentsJson(argumentsJson: string): string | null {
-  const parsed = parseJsonObject(argumentsJson);
+  const parsed = parseJsonObject(argumentsJson) ?? parseLooseObjectLiteral(argumentsJson);
   return parsed ? extractQueryFromObject(parsed) : null;
 }
 
@@ -237,6 +368,77 @@ function parseJsonObject(rawJson: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Best-effort parse for lightly malformed object literals Gemma sometimes emits
+ * (unquoted keys / single quotes). Uses string rewriting, not regex.
+ */
+function parseLooseObjectLiteral(rawJson: string): Record<string, unknown> | null {
+  let candidate = rawJson.split(GEMMA_QUOTE_TOKEN).join('"').trim();
+  if (!candidate.startsWith("{") || !candidate.endsWith("}")) {
+    return null;
+  }
+
+  candidate = candidate.split("'").join('"');
+
+  // Quote bare keys: {name: "x"} → {"name": "x"}
+  let repaired = "";
+  let index = 0;
+  while (index < candidate.length) {
+    const char = candidate[index];
+    if (char === "{" || char === ",") {
+      repaired += char;
+      index += 1;
+      while (index < candidate.length && candidate[index] === " ") {
+        repaired += " ";
+        index += 1;
+      }
+
+      if (index < candidate.length && isUnquotedKeyStart(candidate[index])) {
+        const keyStart = index;
+        while (index < candidate.length && isUnquotedKeyChar(candidate[index])) {
+          index += 1;
+        }
+        const key = candidate.slice(keyStart, index);
+        while (index < candidate.length && candidate[index] === " ") {
+          index += 1;
+        }
+        if (candidate[index] === ":") {
+          repaired += `"${key}"`;
+          continue;
+        }
+
+        repaired += key;
+        continue;
+      }
+
+      continue;
+    }
+
+    repaired += char;
+    index += 1;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(repaired);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function isUnquotedKeyStart(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || char === "_";
+}
+
+function isUnquotedKeyChar(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || char === "_";
 }
 
 /**
@@ -261,11 +463,64 @@ function extractQueryFromObject(value: Record<string, unknown>): string | null {
 
   const nestedArguments = value.arguments;
   if (typeof nestedArguments === "string" && nestedArguments.trim().length > 0) {
-    return readQueryFromArgumentsJson(nestedArguments);
+    return readQueryFromArgumentsJson(nestedArguments) ?? extractQueryByScan(nestedArguments);
   }
 
   if (nestedArguments && typeof nestedArguments === "object" && !Array.isArray(nestedArguments)) {
     return extractQueryFromObject(nestedArguments as Record<string, unknown>);
+  }
+
+  return null;
+}
+
+/**
+ * Last-resort query extraction by scanning for a `query` key and its string value.
+ * Handles `"query":"..."`, `'query':'...'`, and bare `query: value` forms.
+ */
+function extractQueryByScan(text: string): string | null {
+  const lowerText = text.toLowerCase();
+  const keyMarkers = ['"query"', "'query'", "query"] as const;
+
+  for (const marker of keyMarkers) {
+    const keyIndex = lowerText.indexOf(marker);
+    if (keyIndex === -1) {
+      continue;
+    }
+
+    let cursor = keyIndex + marker.length;
+    while (cursor < text.length && (text[cursor] === " " || text[cursor] === "\t")) {
+      cursor += 1;
+    }
+    if (text[cursor] !== ":") {
+      continue;
+    }
+    cursor += 1;
+    while (cursor < text.length && (text[cursor] === " " || text[cursor] === "\t" || text[cursor] === "\n")) {
+      cursor += 1;
+    }
+
+    const quote = text[cursor];
+    if (quote === '"' || quote === "'") {
+      cursor += 1;
+      const end = text.indexOf(quote, cursor);
+      if (end === -1) {
+        continue;
+      }
+      const value = text.slice(cursor, end).trim();
+      if (value.length > 0) {
+        return value;
+      }
+      continue;
+    }
+
+    const endCandidates = [text.indexOf(",", cursor), text.indexOf("}", cursor), text.indexOf("\n", cursor)].filter(
+      (value) => value !== -1,
+    );
+    const end = endCandidates.length > 0 ? Math.min(...endCandidates) : text.length;
+    const value = text.slice(cursor, end).trim();
+    if (value.length > 0) {
+      return value;
+    }
   }
 
   return null;

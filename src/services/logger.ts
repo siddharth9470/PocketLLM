@@ -75,10 +75,11 @@ const PREVIEW_FIELD_KEYS = [
   "bodyPreview",
   "systemPromptPreview",
   "userPromptPreview",
+  "rawOutputPreview",
 ] as const;
 
 /** Events that render a full multi-line payload block under the tree branch. */
-const PAYLOAD_BLOCK_EVENTS = new Set(["payload.system_prompt", "payload.messages"]);
+const PAYLOAD_BLOCK_EVENTS = new Set(["payload.system_prompt", "payload.messages", "pass1.raw_output"]);
 
 const TERMINAL_EVENTS = new Set(["send.completed", "send.failed", "trace.completed", "trace.failed"]);
 
@@ -110,7 +111,9 @@ const EVENT_PRESENTATION: Record<string, EventPresentation> = {
   "inference.completed": { emoji: "💬", label: "Inference finished" },
   "completion.started": { emoji: "🤖", label: "Completion started" },
   "pass1.tool_selection.started": { emoji: "🤖", label: "Pass 1 · tool selection" },
+  "pass1.raw_output": { emoji: "🕵️", label: "RAW PASS 1 OUTPUT" },
   "pass1.tool_call_detected": { emoji: "🛠️", label: "Tool call detected" },
+  "pass1.tool_call_ignored": { emoji: "🛠️", label: "Tool call ignored" },
   "pass1.direct_answer": { emoji: "💬", label: "Pass 1 · direct answer" },
   "pass.direct.started": { emoji: "🤖", label: "Direct reply started" },
   "pass.direct.completed": { emoji: "💬", label: "Direct reply ready" },
@@ -414,6 +417,11 @@ function extractPayloadBody(event: string, fields?: LogFields): string | undefin
 
   if (event === "payload.messages") {
     const value = fields.userPromptPreview;
+    return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  }
+
+  if (event === "pass1.raw_output") {
+    const value = fields.rawOutputPreview;
     return typeof value === "string" && value.trim().length > 0 ? value : undefined;
   }
 
