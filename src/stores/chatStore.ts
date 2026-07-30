@@ -23,6 +23,7 @@ import {
   updateConversation,
 } from "@/db/ChatDB";
 import { chatCompletion, initializeModel, resolveDownloadedModelPath } from "@/services/chatHelper";
+import type { ChatHistoryTurn } from "@/services/inference/chatCompletion";
 import { appLogger } from "@/services/logger";
 import { queueMessageEmbedding } from "@/services/ragService";
 import type { ChatMessage, Conversation } from "@/types/chat";
@@ -82,6 +83,30 @@ function buildStreamingAssistantMessage(conversationId: string, id: string): Cha
     status: "streaming",
     createdAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Maps persisted/UI chat turns into lightweight history for token-bounded inference.
+ * Skips empty bodies and non user/assistant roles (e.g. system).
+ */
+function toChatHistoryTurns(messages: readonly ChatMessage[]): ChatHistoryTurn[] {
+  const turns: ChatHistoryTurn[] = [];
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (message.role !== "user" && message.role !== "assistant") {
+      continue;
+    }
+
+    const content = message.content.trim();
+    if (content.length === 0) {
+      continue;
+    }
+
+    turns.push({ role: message.role, content });
+  }
+
+  return turns;
 }
 
 function replaceAssistantMessage(
@@ -311,6 +336,9 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
       const assistantMessageId = generateChatId();
       const streamingAssistantMessage = buildStreamingAssistantMessage(conversationId, assistantMessageId);
 
+      // Snapshot prior turns before appending the new user / streaming assistant messages.
+      const history = toChatHistoryTurns(conversationDetailsRef.current[conversationId]?.messages ?? []);
+
       const chatTrace = appLogger.startTrace("Chat", {
         conversationId,
         userMessageId: userMessage.id,
@@ -416,6 +444,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
           },
           {
             traceId: chatTrace.traceId,
+            history,
             onSearching: () => {
               if (!isConversationFocused(conversationId)) {
                 return;

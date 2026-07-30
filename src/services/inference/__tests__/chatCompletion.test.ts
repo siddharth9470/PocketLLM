@@ -2,7 +2,7 @@ import { buildCompletionResult } from "@tests/testUtils";
 import type { CompletionParams, LlamaContext, NativeCompletionResult } from "llama.rn";
 import { isTavilyConfigured } from "@/config/env";
 import { LOCAL_SEARCH_TOOL, WEB_SEARCH_TOOL } from "@/constants/chat";
-import { chatCompletion } from "@/services/inference/chatCompletion";
+import { chatCompletion, estimateTokenCount, selectTokenBoundedHistory } from "@/services/inference/chatCompletion";
 import { getActiveContext } from "@/services/inference/llamaRuntime";
 import { searchWeb, type WebSearchResult } from "@/services/tavilySearch";
 
@@ -305,6 +305,51 @@ describe("chatCompletion", () => {
       jest.mocked(getActiveContext).mockReturnValue(null);
 
       await expect(chatCompletion("Hello")).rejects.toThrow("No context found");
+    });
+  });
+
+  describe("token-bounded history window", () => {
+    it("estimates tokens with the chars/4 heuristic", () => {
+      expect(estimateTokenCount("abcd")).toBe(1);
+      expect(estimateTokenCount("abcde")).toBe(2);
+      expect(estimateTokenCount("")).toBe(0);
+    });
+
+    it("keeps the newest turns that fit the token budget in chronological order", () => {
+      const history = [
+        { role: "user" as const, content: "a".repeat(400) }, // ~100 tokens
+        { role: "assistant" as const, content: "b".repeat(400) }, // ~100 tokens
+        { role: "user" as const, content: "c".repeat(400) }, // ~100 tokens
+        { role: "assistant" as const, content: "d".repeat(400) }, // ~100 tokens
+      ];
+
+      const selected = selectTokenBoundedHistory(history, 250);
+
+      expect(selected).toEqual([
+        { role: "user", content: "c".repeat(400) },
+        { role: "assistant", content: "d".repeat(400) },
+      ]);
+    });
+
+    it("injects pruned history between system and latest user on Pass 1", async () => {
+      jest.mocked(isTavilyConfigured).mockReturnValue(false);
+      const completion = jest.fn<ReturnType<CompletionHandler>, Parameters<CompletionHandler>>(async () =>
+        buildCompletionResult({ content: "Got it." }),
+      );
+      installLlamaContext(completion);
+
+      await chatCompletion("Latest question", undefined, {
+        history: [
+          { role: "user", content: "Earlier question" },
+          { role: "assistant", content: "Earlier answer" },
+        ],
+      });
+
+      const messages = completion.mock.calls[0][0].messages ?? [];
+      expect(messages[0]).toEqual(expect.objectContaining({ role: "system" }));
+      expect(messages[1]).toEqual({ role: "user", content: "Earlier question" });
+      expect(messages[2]).toEqual({ role: "assistant", content: "Earlier answer" });
+      expect(messages[messages.length - 1]).toEqual({ role: "user", content: "Latest question" });
     });
   });
 });

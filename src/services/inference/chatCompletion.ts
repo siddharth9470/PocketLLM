@@ -35,6 +35,12 @@ const COMPLETION_STOP_WORDS = [
 
 const MAX_SEARCH_CONTEXT_CHARS = 3000;
 
+/** Soft token budget for short-term chat history injected into Pass 1 / Pass 2 payloads. */
+const MAX_HISTORY_TOKENS = 1200;
+
+/** Approx. chars-per-token heuristic for on-device budget checks (no tokenizer dependency). */
+const CHARS_PER_TOKEN_ESTIMATE = 4;
+
 /** Callback invoked with the accumulated assistant text on each streamed chunk. */
 type StreamTokenHandler = (accumulatedContent: string) => void;
 
@@ -42,6 +48,12 @@ type ChatCompletionMessage = {
   role: string;
   content?: string;
 };
+
+/** Lightweight prior turn used for token-bounded history slicing (no DB/UI fields). */
+export interface ChatHistoryTurn {
+  role: "user" | "assistant";
+  content: string;
+}
 
 /**
  * Which llama.rn completion is being run:
@@ -75,6 +87,11 @@ export interface ChatCompletionOptions {
   onSearching?: () => void;
   /** Correlates LLM/tool/RAG logs with the originating Chat send trace. */
   traceId?: string;
+  /**
+   * Prior conversation turns (chronological), excluding the latest user prompt.
+   * Sliced by `MAX_HISTORY_TOKENS` before injection into Pass 1 / Pass 2 payloads.
+   */
+  history?: readonly ChatHistoryTurn[];
 }
 
 function pipelineLogs(traceId?: string): { llm: ScopedLogger; tool: ScopedLogger } {
@@ -121,6 +138,7 @@ export async function chatCompletion(
     promptLen: userPrompt.length,
     toolsEnabled: true,
     webSearchEnabled,
+    historyTurns: options?.history?.length ?? 0,
     promptPreview: userPrompt,
   });
 
@@ -144,7 +162,7 @@ async function generateReplyWithToolCalling(
   logs.llm.info("pass1.tool_selection.started");
 
   const toolSelectionResponse = await runModelCompletion(
-    buildConversationMessages(userPrompt),
+    buildConversationMessages(userPrompt, options?.history),
     "toolSelection",
     tools,
     createStreamHandler(onToken, "guarded"),
@@ -222,7 +240,7 @@ async function generateWebGroundedReply(
 
   try {
     const groundedAnswerResponse = await runModelCompletion(
-      buildSearchGroundedMessages(userPrompt, groundedSearchContext),
+      buildSearchGroundedMessages(userPrompt, groundedSearchContext, options?.history),
       "groundedAnswer",
       undefined,
       createStreamHandler(onToken, "direct"),
@@ -281,7 +299,7 @@ async function generateRagGroundedReply(
   logs.llm.info("pass2.grounded_answer.started", { contextLen: groundedContext.length });
 
   const groundedAnswerResponse = await runModelCompletion(
-    buildRagGroundedMessages(userPrompt, groundedContext),
+    buildRagGroundedMessages(userPrompt, groundedContext, options?.history),
     "groundedAnswer",
     undefined,
     createStreamHandler(onToken, "direct"),
@@ -384,40 +402,108 @@ function buildCompletionParams(
   };
 }
 
-/** System + user messages for the tool-selection pass (no pre-injected RAG). */
-function buildConversationMessages(userPrompt: string): ChatCompletionMessage[] {
-  return [
-    { role: "system", content: CHAT_SYSTEM_PROMPT },
-    { role: "user", content: userPrompt },
-  ];
+/** Estimates token count with a fixed chars/token heuristic (no tokenizer I/O). */
+export function estimateTokenCount(text: string): number {
+  if (!text) {
+    return 0;
+  }
+
+  return Math.ceil(text.length / CHARS_PER_TOKEN_ESTIMATE);
 }
 
 /**
- * Messages for the web-search grounded-answer pass. Search results are embedded
- * in the user turn (not an OAI `tool` role) for broad on-device model compatibility.
+ * Selects the newest prior turns that fit within `tokenBudget`.
+ * Walks the history array backward in O(N), then reverses once for chronological order.
+ * Does not mutate the input array and never deep-clones turn objects beyond a shallow copy
+ * of `{ role, content }` for selected turns.
  */
-function buildSearchGroundedMessages(userPrompt: string, groundedSearchContext: string): ChatCompletionMessage[] {
-  return [
-    { role: "system", content: CHAT_ANSWER_WITH_SEARCH_PROMPT },
-    {
-      role: "user",
-      content: `Question: ${userPrompt}\n\nWeb search results:\n${groundedSearchContext}\n\nAnswer the question using the search results above.`,
-    },
-  ];
+export function selectTokenBoundedHistory(
+  history: readonly ChatHistoryTurn[],
+  tokenBudget: number = MAX_HISTORY_TOKENS,
+): ChatHistoryTurn[] {
+  if (history.length === 0 || tokenBudget <= 0) {
+    return [];
+  }
+
+  const selectedReversed: ChatHistoryTurn[] = [];
+  let usedTokens = 0;
+
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const turn = history[index];
+    const content = turn.content.trim();
+    if (content.length === 0) {
+      continue;
+    }
+
+    const turnTokens = estimateTokenCount(content);
+    if (usedTokens + turnTokens > tokenBudget) {
+      break;
+    }
+
+    selectedReversed.push({ role: turn.role, content });
+    usedTokens += turnTokens;
+  }
+
+  selectedReversed.reverse();
+  return selectedReversed;
 }
 
 /**
- * Messages for the local-history grounded-answer pass. Retrieved chat excerpts
- * are embedded in the user turn using `CHAT_ANSWER_WITH_RAG_PROMPT`.
+ * Builds `[system, ...prunedHistory, latestUser]` for Pass 1 tool selection.
+ * System prompt and latest user message are always retained; history is token-bounded.
  */
-function buildRagGroundedMessages(userPrompt: string, ragContext: string): ChatCompletionMessage[] {
-  return [
-    { role: "system", content: CHAT_ANSWER_WITH_RAG_PROMPT },
-    {
-      role: "user",
-      content: `Question: ${userPrompt}\n\nPast conversation excerpts:\n${ragContext}\n\nAnswer the question using the excerpts above when relevant.`,
-    },
-  ];
+function buildConversationMessages(
+  userPrompt: string,
+  history: readonly ChatHistoryTurn[] | undefined,
+): ChatCompletionMessage[] {
+  return buildMessagesWithHistory(CHAT_SYSTEM_PROMPT, userPrompt, history);
+}
+
+/**
+ * Messages for the web-search grounded-answer pass. Search results stay on the
+ * latest user turn; pruned short-term history is inserted between system and that turn.
+ */
+function buildSearchGroundedMessages(
+  userPrompt: string,
+  groundedSearchContext: string,
+  history: readonly ChatHistoryTurn[] | undefined,
+): ChatCompletionMessage[] {
+  const latestUserContent = `Question: ${userPrompt}\n\nWeb search results:\n${groundedSearchContext}\n\nAnswer the question using the search results above.`;
+  return buildMessagesWithHistory(CHAT_ANSWER_WITH_SEARCH_PROMPT, latestUserContent, history);
+}
+
+/**
+ * Messages for the local-history grounded-answer pass. RAG excerpts stay on the
+ * latest user turn; pruned short-term history is inserted between system and that turn.
+ */
+function buildRagGroundedMessages(
+  userPrompt: string,
+  ragContext: string,
+  history: readonly ChatHistoryTurn[] | undefined,
+): ChatCompletionMessage[] {
+  const latestUserContent = `Question: ${userPrompt}\n\nPast conversation excerpts:\n${ragContext}\n\nAnswer the question using the excerpts above when relevant.`;
+  return buildMessagesWithHistory(CHAT_ANSWER_WITH_RAG_PROMPT, latestUserContent, history);
+}
+
+/**
+ * Shared payload assembler: `[system, ...tokenBoundedHistory, latestUser]`.
+ * History never displaces the system prompt (index 0) or the latest user turn (end).
+ */
+function buildMessagesWithHistory(
+  systemPrompt: string,
+  latestUserContent: string,
+  history: readonly ChatHistoryTurn[] | undefined,
+): ChatCompletionMessage[] {
+  const prunedHistory = selectTokenBoundedHistory(history ?? []);
+  const messages: ChatCompletionMessage[] = [{ role: "system", content: systemPrompt }];
+
+  for (let index = 0; index < prunedHistory.length; index += 1) {
+    const turn = prunedHistory[index];
+    messages.push({ role: turn.role, content: turn.content });
+  }
+
+  messages.push({ role: "user", content: latestUserContent });
+  return messages;
 }
 
 /** Prefers Tavily's concise answer as model context; otherwise truncates raw snippets. */
