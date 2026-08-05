@@ -15,7 +15,6 @@ import type {
 } from "@/navigation/types";
 import ChatListScreen from "@/screens/chats/ChatListScreen";
 import ChatScreen from "@/screens/chats/ChatScreen";
-import InitialScreen from "@/screens/InitialScreen";
 import DownloadedModelsScreen from "@/screens/models/DownloadedModelsScreen";
 import ModelDetailsScreen from "@/screens/models/ModelDetails";
 import ModelsScreen from "@/screens/models/ModelsScreen";
@@ -60,7 +59,6 @@ function chatScreenOptions({ route }: { route: RouteProp<ChatsStackParamList, "C
 export default function CentralNavigator() {
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
-      <RootStack.Screen name="Initial" component={InitialScreen} />
       <RootStack.Screen name="Main" component={MainTabs} />
     </RootStack.Navigator>
   );

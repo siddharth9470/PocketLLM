@@ -3,11 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { DialogProvider } from "@/components/AppDialog";
 import { logTavilyConfigStatus } from "@/config/env";
 import { CUSTOM_FONT_ASSETS } from "@/constants/fonts";
-import { colors } from "@/constants/theme";
+import { colors, spacing, typography } from "@/constants/theme";
 import { initializeAllDatabases } from "@/db";
 import CentralNavigator from "@/navigation/CentralNavigator";
 import { prewarmEmbeddingModel, verifyEmbeddingPipelineOnDevice } from "@/services/ragService";
@@ -51,7 +51,7 @@ export default function App() {
   if (!isDbReady || !fontsLoaded) {
     return (
       <View style={styles.bootContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.brand}>PocketLLM</Text>
       </View>
     );
   }
@@ -78,5 +78,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.background,
+  },
+  brand: {
+    ...typography.title,
+    color: colors.primary,
+    marginBottom: spacing.xl,
   },
 });

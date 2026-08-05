@@ -5,7 +5,6 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { HuggingFaceModel } from "@/types/models";
 
 export type RootStackParamList = {
-  Initial: undefined;
   Main: undefined;
 };
 
