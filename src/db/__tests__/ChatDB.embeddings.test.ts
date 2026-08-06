@@ -37,9 +37,7 @@ describe("ChatDB message embeddings", () => {
   it("persists embeddings into message_embeddings", async () => {
     await saveMessageEmbedding(MESSAGE_ID, CONVERSATION_ID, MESSAGE_ROLE, QUERY_VECTOR);
 
-    const insertCall = mockExecute.mock.calls.find(([sql]) =>
-      String(sql).includes("INSERT INTO message_embeddings"),
-    );
+    const insertCall = mockExecute.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO message_embeddings"));
     expect(insertCall).toBeDefined();
     const [sql, params] = insertCall as [string, unknown[]];
     expect(sql).toContain("INSERT INTO message_embeddings");
