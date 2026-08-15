@@ -1,4 +1,5 @@
 import { mockExecute } from "@tests/testUtils";
+import { EMBEDDING_DIMENSION, EMBEDDING_MODEL_ID } from "@/constants/rag";
 import {
   chatDb,
   createMessage,
@@ -6,6 +7,8 @@ import {
   deleteConversation,
   getConversationById,
   getMessagesByConversationId,
+  saveMessageEmbedding,
+  searchSimilarMessages,
   updateConversation,
   updateMessage,
 } from "@/db/ChatDB";
@@ -55,10 +58,13 @@ function findExecuteCall(sqlFragment: string): [string, unknown[]] {
   return call as [string, unknown[]];
 }
 
-/** Routes SELECT statements to the supplied message and attachment rows. */
-function installReadMock(messageRows: unknown[], attachmentRows: unknown[] = []): void {
+/** Routes SELECT statements to the supplied embedding, message, and attachment rows. */
+function installReadMock(messageRows: unknown[], attachmentRows: unknown[] = [], embeddingRows: unknown[] = []): void {
   mockExecute.mockImplementation(async (sql: string) => {
     const query = String(sql);
+    if (query.includes("message_embeddings")) {
+      return { rows: embeddingRows, rowsAffected: 0 };
+    }
     if (query.includes("FROM chat_messages")) {
       return { rows: messageRows, rowsAffected: 0 };
     }
@@ -317,6 +323,41 @@ describe("ChatDB", () => {
       expect(deleteOrder[0]).toContain("DELETE FROM message_embeddings");
       expect(deleteOrder[1]).toContain("DELETE FROM chat_messages");
       expect(deleteOrder[2]).toContain("DELETE FROM conversations");
+    });
+  });
+
+  describe("message embeddings", () => {
+    const MESSAGE_ROLE = "assistant" as const;
+    const QUERY_VECTOR = new Float32Array(EMBEDDING_DIMENSION).fill(0.1);
+
+    it("persists embeddings into message_embeddings", async () => {
+      await saveMessageEmbedding(MESSAGE_ID, CONVERSATION_ID, MESSAGE_ROLE, QUERY_VECTOR);
+
+      const [sql, params] = findExecuteCall("INSERT INTO message_embeddings");
+      expect(sql).toContain("INSERT INTO message_embeddings");
+      expect(params[0]).toBe(MESSAGE_ID);
+      expect(params[1]).toBe(CONVERSATION_ID);
+      expect(params[2]).toBe(MESSAGE_ROLE);
+      expect(params[3]).toBe(EMBEDDING_DIMENSION);
+      expect(params[4]).toBe(EMBEDDING_MODEL_ID);
+      expect(params[5]).toBe(QUERY_VECTOR);
+    });
+
+    it("searches similar messages via sqlite-vec and hydrates chat rows", async () => {
+      installReadMock(
+        [buildChatMessageRow({ content: "Retrieved answer" })],
+        [],
+        [{ message_id: MESSAGE_ID, distance: 0.12 }],
+      );
+
+      const results = await searchSimilarMessages(QUERY_VECTOR, 4);
+
+      const [knnSql] = findExecuteCall("message_embeddings");
+      expect(knnSql).toContain("embedding MATCH");
+      expect(knnSql).toContain("ORDER BY distance");
+      expect(results).toHaveLength(1);
+      expect(results[0]?.id).toBe(MESSAGE_ID);
+      expect(results[0]?.content).toBe("Retrieved answer");
     });
   });
 });

@@ -1,5 +1,7 @@
 import { buildCompletionResult } from "@tests/testUtils";
 import {
+  type ChatToolCall,
+  type ChatToolName,
   looksLikeTextToolCall,
   resolveChatToolCall,
   resolveWebSearchToolCall,
@@ -8,18 +10,26 @@ import {
 
 const USER_FALLBACK_QUERY = "What is the price of the Cursor Pro plan?";
 
-function structuredToolCallResult(name: "web_search" | "search_local_history", argumentsJson: string) {
+function structuredToolCallResult(name: ChatToolName, argumentsJson: string) {
   return buildCompletionResult({
     tool_calls: [{ type: "function", function: { name, arguments: argumentsJson } }],
   });
 }
 
+/** Resolves a structured `tool_calls[]` entry against the shared user fallback query. */
+function resolveStructured(name: ChatToolName, argumentsJson: string): ChatToolCall | null {
+  return resolveChatToolCall(structuredToolCallResult(name, argumentsJson), USER_FALLBACK_QUERY);
+}
+
+/** Resolves a tool call embedded in free-form model output (`content` plus optional `text`). */
+function resolveFromOutput(content: string, text?: string): ChatToolCall | null {
+  return resolveChatToolCall(buildCompletionResult({ content, text }), USER_FALLBACK_QUERY);
+}
+
 describe("resolveChatToolCall", () => {
   describe("structured tool_calls (PARSE-01, PARSE-02)", () => {
     it("reads a web_search call from a JSON `query` argument", () => {
-      const result = structuredToolCallResult("web_search", JSON.stringify({ query: "cursor pro pricing" }));
-
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toEqual({
+      expect(resolveStructured("web_search", JSON.stringify({ query: "cursor pro pricing" }))).toEqual({
         name: "web_search",
         query: "cursor pro pricing",
         source: "structured",
@@ -27,9 +37,7 @@ describe("resolveChatToolCall", () => {
     });
 
     it("reads a search_local_history call from a JSON `query` argument", () => {
-      const result = structuredToolCallResult("search_local_history", JSON.stringify({ query: "favorite color" }));
-
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toEqual({
+      expect(resolveStructured("search_local_history", JSON.stringify({ query: "favorite color" }))).toEqual({
         name: "search_local_history",
         query: "favorite color",
         source: "structured",
@@ -37,15 +45,15 @@ describe("resolveChatToolCall", () => {
     });
 
     it("picks the first non-empty entry from a `queries` array argument", () => {
-      const result = structuredToolCallResult("web_search", JSON.stringify({ queries: ["", "  ", "iphone 17 price"] }));
+      const args = JSON.stringify({ queries: ["", "  ", "iphone 17 price"] });
 
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)?.query).toBe("iphone 17 price");
+      expect(resolveStructured("web_search", args)?.query).toBe("iphone 17 price");
     });
 
     it("normalizes Gemma quote tokens in the arguments payload", () => {
-      const result = structuredToolCallResult("web_search", '{<|"|>query<|"|>: <|"|>weather in delhi<|"|>}');
+      const args = '{<|"|>query<|"|>: <|"|>weather in delhi<|"|>}';
 
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)?.query).toBe("weather in delhi");
+      expect(resolveStructured("web_search", args)?.query).toBe("weather in delhi");
     });
 
     it("ignores tool calls that are not known chat tools", () => {
@@ -58,9 +66,7 @@ describe("resolveChatToolCall", () => {
     });
 
     it("falls back to the user prompt when structured arguments are not valid JSON", () => {
-      const result = structuredToolCallResult("web_search", "<|tool_call|>call:web_search{}");
-
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toEqual({
+      expect(resolveStructured("web_search", "<|tool_call|>call:web_search{}")).toEqual({
         name: "web_search",
         query: USER_FALLBACK_QUERY,
         source: "structured",
@@ -68,22 +74,15 @@ describe("resolveChatToolCall", () => {
     });
 
     it("reads a query nested under stringified arguments", () => {
-      const result = structuredToolCallResult(
-        "search_local_history",
-        JSON.stringify({ arguments: JSON.stringify({ query: "prior preference" }) }),
-      );
+      const args = JSON.stringify({ arguments: JSON.stringify({ query: "prior preference" }) });
 
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)?.query).toBe("prior preference");
+      expect(resolveStructured("search_local_history", args)?.query).toBe("prior preference");
     });
   });
 
   describe("plain JSON and Gemma-style text tool calls (PARSE-03, PARSE-04)", () => {
     it("resolves an inline web_search tool call as source 'text'", () => {
-      const result = buildCompletionResult({
-        content: '<|tool_call|>call:web_search{"query": "cursor pro price"}',
-      });
-
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toEqual({
+      expect(resolveFromOutput('<|tool_call|>call:web_search{"query": "cursor pro price"}')).toEqual({
         name: "web_search",
         query: "cursor pro price",
         source: "text",
@@ -91,14 +90,9 @@ describe("resolveChatToolCall", () => {
     });
 
     it("resolves a plain JSON search_local_history object", () => {
-      const result = buildCompletionResult({
-        content: JSON.stringify({
-          name: "search_local_history",
-          arguments: { query: "favorite color" },
-        }),
-      });
+      const content = JSON.stringify({ name: "search_local_history", arguments: { query: "favorite color" } });
 
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toEqual({
+      expect(resolveFromOutput(content)).toEqual({
         name: "search_local_history",
         query: "favorite color",
         source: "text",
@@ -106,16 +100,14 @@ describe("resolveChatToolCall", () => {
     });
 
     it("resolves search_local_history inside a markdown json fence", () => {
-      const result = buildCompletionResult({
-        content: [
-          "I'll look that up.",
-          "```json",
-          '{"name":"search_local_history","arguments":{"query":"favorite color"}}',
-          "```",
-        ].join("\n"),
-      });
+      const content = [
+        "I'll look that up.",
+        "```json",
+        '{"name":"search_local_history","arguments":{"query":"favorite color"}}',
+        "```",
+      ].join("\n");
 
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toEqual({
+      expect(resolveFromOutput(content)).toEqual({
         name: "search_local_history",
         query: "favorite color",
         source: "text",
@@ -123,11 +115,9 @@ describe("resolveChatToolCall", () => {
     });
 
     it("resolves XML-style search_local_history parameter blocks", () => {
-      const result = buildCompletionResult({
-        content: '<tool_call>search_local_history<parameter name="query">favorite color</parameter></tool_call>',
-      });
+      const content = '<tool_call>search_local_history<parameter name="query">favorite color</parameter></tool_call>';
 
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toEqual({
+      expect(resolveFromOutput(content)).toEqual({
         name: "search_local_history",
         query: "favorite color",
         source: "text",
@@ -135,11 +125,9 @@ describe("resolveChatToolCall", () => {
     });
 
     it("resolves lightly unquoted JSON tool arguments", () => {
-      const result = buildCompletionResult({
-        content: '{name: "search_local_history", arguments: {query: "prior decision"}}',
-      });
+      const content = '{name: "search_local_history", arguments: {query: "prior decision"}}';
 
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toEqual({
+      expect(resolveFromOutput(content)).toEqual({
         name: "search_local_history",
         query: "prior decision",
         source: "text",
@@ -147,9 +135,7 @@ describe("resolveChatToolCall", () => {
     });
 
     it("falls back to the user prompt when the query cannot be extracted (PARSE-04)", () => {
-      const result = buildCompletionResult({ content: "<|tool_call|>call:web_search{ malformed }" });
-
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toEqual({
+      expect(resolveFromOutput("<|tool_call|>call:web_search{ malformed }")).toEqual({
         name: "web_search",
         query: USER_FALLBACK_QUERY,
         source: "text",
@@ -157,49 +143,32 @@ describe("resolveChatToolCall", () => {
     });
 
     it("combines `content` and `text` fields when detecting the tool call", () => {
-      const result = buildCompletionResult({
-        content: "",
-        text: 'call:web_search{"query": "stock quote"}',
-      });
-
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)?.query).toBe("stock quote");
+      expect(resolveFromOutput("", 'call:web_search{"query": "stock quote"}')?.query).toBe("stock quote");
     });
   });
 
   describe("non-tool output (PARSE-05)", () => {
     it("returns null for ordinary assistant prose", () => {
-      const result = buildCompletionResult({ content: "Paris is the capital of France." });
-
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toBeNull();
+      expect(resolveFromOutput("Paris is the capital of France.")).toBeNull();
     });
 
     it("does not treat a plain mention of web_search as a tool call", () => {
-      const result = buildCompletionResult({ content: "You could use a web_search feature for that." });
-
-      expect(resolveChatToolCall(result, USER_FALLBACK_QUERY)).toBeNull();
+      expect(resolveFromOutput("You could use a web_search feature for that.")).toBeNull();
     });
   });
 });
 
 describe("resolveWebSearchToolCall", () => {
   it("returns web_search calls and ignores local history calls", () => {
-    expect(
-      resolveWebSearchToolCall(
-        structuredToolCallResult("web_search", JSON.stringify({ query: "news" })),
-        USER_FALLBACK_QUERY,
-      ),
-    ).toEqual({
+    const webSearch = structuredToolCallResult("web_search", JSON.stringify({ query: "news" }));
+    const localHistory = structuredToolCallResult("search_local_history", JSON.stringify({ query: "prefs" }));
+
+    expect(resolveWebSearchToolCall(webSearch, USER_FALLBACK_QUERY)).toEqual({
       name: "web_search",
       query: "news",
       source: "structured",
     });
-
-    expect(
-      resolveWebSearchToolCall(
-        structuredToolCallResult("search_local_history", JSON.stringify({ query: "prefs" })),
-        USER_FALLBACK_QUERY,
-      ),
-    ).toBeNull();
+    expect(resolveWebSearchToolCall(localHistory, USER_FALLBACK_QUERY)).toBeNull();
   });
 });
 

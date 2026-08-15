@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 import {
   buildMockConversations,
   MOCK_NEW_CONVERSATION_ID,
+  type MockChatStore,
   mockChatStore,
   restoreRealChatStore,
 } from "@tests/testUtils";
@@ -23,10 +24,6 @@ jest.mock("@react-navigation/native", () => {
     },
   };
 });
-jest.mock("@expo/vector-icons", () => {
-  const { Text } = require("react-native");
-  return { Ionicons: Text };
-});
 
 const MOCK_CONVERSATIONS = buildMockConversations();
 
@@ -38,7 +35,9 @@ const navigation = {
 
 const chatListRoute = { key: "ChatList", name: "ChatList" as const, params: undefined };
 
-function mountChatList() {
+/** Installs a loaded (non-empty by override) store state and mounts the screen. */
+async function mountChatList(storeOverrides: Partial<MockChatStore> = {}) {
+  mockChatStore({ conversations: [], isLoadingConversations: false, ...storeOverrides });
   return render(<ChatListScreen navigation={navigation as never} route={chatListRoute as never} />);
 }
 
@@ -49,23 +48,24 @@ describe("ChatListScreen", () => {
   });
 
   it("shows empty-state copy when no conversations exist", async () => {
-    mockChatStore({ conversations: [], isLoadingConversations: false });
     await mountChatList();
+
     expect(screen.getByText(ChatScreenLabels.EMPTY_STATE)).toBeTruthy();
   });
 
   it("inflates conversation rows with titles and previews", async () => {
-    mockChatStore({ conversations: MOCK_CONVERSATIONS, isLoadingConversations: false });
-    await mountChatList();
+    await mountChatList({ conversations: MOCK_CONVERSATIONS });
+
     expect(screen.getByText("Gemma chat")).toBeTruthy();
     expect(screen.getByText("Hello there")).toBeTruthy();
     expect(screen.getByText("Quick test")).toBeTruthy();
   });
 
   it("navigates to Chat when Create New Chat is pressed", async () => {
-    mockChatStore({ conversations: [], isLoadingConversations: false });
     await mountChatList();
-    fireEvent.press(screen.getByText(ChatScreenLabels.CREATE_NEW_CHAT));
+
+    await fireEvent.press(screen.getByText(ChatScreenLabels.CREATE_NEW_CHAT));
+
     expect(navigation.navigate).toHaveBeenCalledWith("Chat", {
       conversationId: MOCK_NEW_CONVERSATION_ID,
       title: ChatScreenLabels.NEW_CHAT_TITLE,

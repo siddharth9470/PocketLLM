@@ -12,11 +12,18 @@ import {
 const MODEL = MOCK_HF_MODELS[0];
 const GGUF_FILENAME = "gemma-2b-q4.gguf";
 
+/** Replaces `global.fetch` with the given mock; the cast is confined to this boundary helper. */
+function installFetchMock(mock: jest.Mock): void {
+  global.fetch = mock as unknown as typeof fetch;
+}
+
 function mockHeadResponse(contentLength: string | null, ok = true): void {
-  global.fetch = jest.fn().mockResolvedValue({
-    ok,
-    headers: { get: jest.fn().mockReturnValue(contentLength) },
-  }) as unknown as typeof fetch;
+  installFetchMock(
+    jest.fn().mockResolvedValue({
+      ok,
+      headers: { get: jest.fn().mockReturnValue(contentLength) },
+    }),
+  );
 }
 
 describe("downloadHelpers", () => {
@@ -89,7 +96,7 @@ describe("downloadHelpers", () => {
     });
 
     it("returns null when the request throws", async () => {
-      global.fetch = jest.fn().mockRejectedValue(new Error("network down")) as unknown as typeof fetch;
+      installFetchMock(jest.fn().mockRejectedValue(new Error("network down")));
 
       await expect(getRemoteGgufFileSizeBytes(MODEL.id, GGUF_FILENAME)).resolves.toBeNull();
     });
@@ -97,7 +104,7 @@ describe("downloadHelpers", () => {
 
   describe("getDownloadUrlForModel (STORE-04)", () => {
     it("uses the known size and skips the HEAD request", async () => {
-      global.fetch = jest.fn();
+      installFetchMock(jest.fn());
 
       const target = await getDownloadUrlForModel(MODEL, GGUF_FILENAME, 999);
 

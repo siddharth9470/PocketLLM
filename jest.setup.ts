@@ -31,36 +31,46 @@ jest.mock("react-native-reanimated", () => {
 });
 
 jest.mock("react-native-gesture-handler", () => {
-  const { View } = require("react-native");
+  const RN = require("react-native");
+  const viewStubNames = [
+    "Swipeable",
+    "DrawerLayout",
+    "DrawerLayoutAndroid",
+    "Slider",
+    "Switch",
+    "ToolbarAndroid",
+    "ViewPagerAndroid",
+    "WebView",
+    "NativeViewGestureHandler",
+    "TapGestureHandler",
+    "FlingGestureHandler",
+    "ForceTouchGestureHandler",
+    "LongPressGestureHandler",
+    "PanGestureHandler",
+    "PinchGestureHandler",
+    "RotationGestureHandler",
+    "RawButton",
+    "BaseButton",
+    "RectButton",
+    "BorderlessButton",
+    "GestureHandlerRootView",
+  ];
+
   return {
-    Swipeable: View,
-    DrawerLayout: View,
+    ...Object.fromEntries(viewStubNames.map((name) => [name, RN.View])),
+    // Chat composer and message list need the real primitives so text entry and layout events work.
+    ScrollView: RN.ScrollView,
+    TextInput: RN.TextInput,
+    FlatList: RN.FlatList,
     State: {},
-    ScrollView: View,
-    Slider: View,
-    Switch: View,
-    TextInput: View,
-    ToolbarAndroid: View,
-    ViewPagerAndroid: View,
-    DrawerLayoutAndroid: View,
-    WebView: View,
-    NativeViewGestureHandler: View,
-    TapGestureHandler: View,
-    FlingGestureHandler: View,
-    ForceTouchGestureHandler: View,
-    LongPressGestureHandler: View,
-    PanGestureHandler: View,
-    PinchGestureHandler: View,
-    RotationGestureHandler: View,
-    RawButton: View,
-    BaseButton: View,
-    RectButton: View,
-    BorderlessButton: View,
-    FlatList: View,
-    gestureHandlerRootHOC: jest.fn((component) => component),
     Directions: {},
-    GestureHandlerRootView: View,
+    gestureHandlerRootHOC: jest.fn((component) => component),
   };
+});
+
+jest.mock("@expo/vector-icons", () => {
+  const { Text } = require("react-native");
+  return { Ionicons: Text };
 });
 
 jest.mock("@kesha-antonov/react-native-background-downloader", () => ({

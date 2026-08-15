@@ -78,26 +78,32 @@ describe("env / Tavily configuration", () => {
   });
 
   describe("logTavilyConfigStatus (ENV-07)", () => {
+    let logSpy: jest.SpyInstance;
+    let warnSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      logSpy = jest.spyOn(console, "log").mockImplementation(() => undefined);
+      warnSpy = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
     it("logs only a truncated prefix and never the full key", () => {
       process.env[ENV_KEY] = "tvly-secret-1234567890";
-      const logSpy = jest.spyOn(console, "log").mockImplementation(() => undefined);
 
       logTavilyConfigStatus();
 
       const loggedOutput = logSpy.mock.calls.flat().join(" ");
       expect(loggedOutput).toContain("tvly-sec...");
       expect(loggedOutput).not.toContain("tvly-secret-1234567890");
-
-      logSpy.mockRestore();
     });
 
     it("warns with remediation guidance when the key is missing", () => {
-      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => undefined);
-
       logTavilyConfigStatus();
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(".env.development"));
-      warnSpy.mockRestore();
     });
   });
 });

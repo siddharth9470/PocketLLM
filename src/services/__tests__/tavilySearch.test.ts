@@ -24,9 +24,9 @@ function mockFetchResponse(body: TavilyResponseBody, init: { ok?: boolean; statu
 describe("searchWeb", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(console, "log").mockImplementation(() => undefined);
-    jest.spyOn(console, "info").mockImplementation(() => undefined);
-    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    for (const level of ["log", "info", "error"] as const) {
+      jest.spyOn(console, level).mockImplementation(() => undefined);
+    }
     jest.mocked(getTavilyApiKey).mockReturnValue(MOCK_API_KEY);
   });
 
@@ -52,8 +52,7 @@ describe("searchWeb", () => {
 
       const [url, init] = jest.mocked(global.fetch).mock.calls[0];
       expect(url).toBe("https://api.tavily.com/search");
-      const body = JSON.parse(String((init as RequestInit).body));
-      expect(body).toMatchObject({
+      expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({
         api_key: MOCK_API_KEY,
         query: QUERY,
         max_results: 8,

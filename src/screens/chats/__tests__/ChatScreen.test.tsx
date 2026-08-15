@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import {
   buildCompletedModel,
   buildReadyConversation,
@@ -21,7 +21,15 @@ jest.mock("@/stores/chatStore", () => {
     useChatStore: jest.fn(actual.useChatStore),
   };
 });
+// The orchestrator owns SecureStore / crypto / orphan-file cleanup, none of which belong in a screen
+// test; background embedding only needs it to resolve. `modelDb` is stubbed too because `@/db/index`
+// consumes the manager instance directly, and an incomplete mock surfaces as an undefined `initialize`.
+jest.mock("@/db", () => ({
+  ensureDatabaseReady: jest.fn().mockResolvedValue(undefined),
+  initializeAllDatabases: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock("@/db/ModelDB", () => ({
+  modelDb: { initialize: jest.fn().mockResolvedValue(undefined) },
   getDownloadedModelsList: jest.fn(),
 }));
 jest.mock("@/services/chatHelper", () => ({
@@ -51,10 +59,6 @@ jest.mock("@react-navigation/native", () => {
 jest.mock("@react-navigation/elements", () => ({
   useHeaderHeight: () => 0,
 }));
-jest.mock("@expo/vector-icons", () => {
-  const { Text } = require("react-native");
-  return { Ionicons: Text };
-});
 jest.mock("react-native-keyboard-controller", () => {
   const RN = require("react-native");
   return {
@@ -73,39 +77,8 @@ jest.mock("react-native-safe-area-context", () => {
     useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
   };
 });
-jest.mock("react-native-gesture-handler", () => {
-  const RN = require("react-native");
-  return {
-    Swipeable: RN.View,
-    DrawerLayout: RN.View,
-    State: {},
-    ScrollView: RN.ScrollView,
-    Slider: RN.View,
-    Switch: RN.View,
-    TextInput: RN.TextInput,
-    ToolbarAndroid: RN.View,
-    ViewPagerAndroid: RN.View,
-    DrawerLayoutAndroid: RN.View,
-    WebView: RN.View,
-    NativeViewGestureHandler: RN.View,
-    TapGestureHandler: RN.View,
-    FlingGestureHandler: RN.View,
-    ForceTouchGestureHandler: RN.View,
-    LongPressGestureHandler: RN.View,
-    PanGestureHandler: RN.View,
-    PinchGestureHandler: RN.View,
-    RotationGestureHandler: RN.View,
-    RawButton: RN.View,
-    BaseButton: RN.View,
-    RectButton: RN.View,
-    BorderlessButton: RN.View,
-    FlatList: RN.FlatList,
-    gestureHandlerRootHOC: jest.fn((component: unknown) => component),
-    Directions: {},
-    GestureHandlerRootView: RN.View,
-  };
-});
 
+const GIFTED_CHAT_WRAPPER_TEST_ID = "GC_WRAPPER";
 const GIFTED_CHAT_SEND_TEST_ID = "GC_SEND_TOUCHABLE";
 const MOCK_MODEL = buildCompletedModel();
 const MOCK_MODEL_PATH = "/mock/path.gguf";
@@ -118,75 +91,60 @@ const navigation = {
   addListener: jest.fn(() => jest.fn()),
 };
 
-const chatRoute = {
+const buildChatRoute = (conversationId: string) => ({
   key: "Chat",
   name: "Chat" as const,
-  params: { conversationId: MOCK_NEW_CONVERSATION_ID, title: ChatScreenLabels.NEW_CHAT_TITLE },
-};
+  params: { conversationId, title: ChatScreenLabels.NEW_CHAT_TITLE },
+});
 
-const dbSyncRoute = {
-  key: "Chat",
-  name: "Chat" as const,
-  params: { conversationId: "conv-db-sync", title: ChatScreenLabels.NEW_CHAT_TITLE },
-};
+const chatRoute = buildChatRoute(MOCK_NEW_CONVERSATION_ID);
+const dbSyncRoute = buildChatRoute("conv-db-sync");
 
-function getChatMessageInserts(): unknown[][] {
+/** Bound parameters of every execute whose SQL contains `sqlFragment`, in call order. */
+function getInsertParams(sqlFragment: string): unknown[][] {
   return mockExecute.mock.calls
-    .filter(([sql]) => String(sql).includes("INSERT INTO chat_messages"))
+    .filter(([sql]) => String(sql).includes(sqlFragment))
     .map(([, params]) => params as unknown[]);
 }
 
-function mountChatScreen() {
-  return render(<ChatScreen navigation={navigation as never} route={chatRoute as never} />);
+async function mountChatScreen(route = chatRoute) {
+  return render(<ChatScreen navigation={navigation as never} route={route as never} />);
 }
 
+/** Mounts inside the real store provider and waits for Gifted Chat to be on screen. */
 async function mountChatScreenWithProvider(route = chatRoute) {
-  let view: ReturnType<typeof render> | undefined;
-  await act(async () => {
-    view = render(
-      <ChatStoreProvider>
-        <ChatScreen navigation={navigation as never} route={route as never} />
-      </ChatStoreProvider>,
-    );
-  });
-  await waitFor(() => expect(screen.getByTestId("GC_WRAPPER")).toBeTruthy());
-  return view as ReturnType<typeof render>;
+  const view = await render(
+    <ChatStoreProvider>
+      <ChatScreen navigation={navigation as never} route={route as never} />
+    </ChatStoreProvider>,
+  );
+  await screen.findByTestId(GIFTED_CHAT_WRAPPER_TEST_ID);
+  return view;
 }
 
-async function initializeGiftedChat() {
-  const wrapper = await waitFor(() => screen.getByTestId("GC_WRAPPER"));
-  await act(async () => {
-    fireEvent(wrapper, "layout", {
-      nativeEvent: { layout: { height: 600, width: 400, x: 0, y: 0 } },
-    });
-  });
+/** Gifted Chat only renders its composer once the wrapper has reported a layout. */
+async function layoutGiftedChat() {
+  const wrapper = await screen.findByTestId(GIFTED_CHAT_WRAPPER_TEST_ID);
+  await fireEvent(wrapper, "layout", { nativeEvent: { layout: { height: 600, width: 400, x: 0, y: 0 } } });
 }
 
 async function selectDownloadedModel() {
   const [modelTrigger] = screen.getAllByText(ChatScreenLabels.MODEL_SELECT_TITLE);
-  await act(async () => {
-    fireEvent.press(modelTrigger);
-  });
-  const modelOption = await screen.findByText("gemma-2b-q4");
-  await act(async () => {
-    fireEvent.press(modelOption);
-  });
+  await fireEvent.press(modelTrigger);
+  await fireEvent.press(await screen.findByText("gemma-2b-q4"));
 }
 
 async function typeAndSendMessage(prompt: string) {
-  await initializeGiftedChat();
+  await layoutGiftedChat();
+
   const composer = await screen.findByTestId(ChatScreenLabels.COMPOSER_PLACEHOLDER);
-  await act(async () => {
-    fireEvent.changeText(composer, prompt);
-  });
+  await fireEvent.changeText(composer, prompt);
   await waitFor(() => expect(composer.props.value).toBe(prompt));
 
-  const sendButton = await screen.findByTestId(GIFTED_CHAT_SEND_TEST_ID);
-  await act(async () => {
-    fireEvent.press(sendButton);
-  });
+  await fireEvent.press(await screen.findByTestId(GIFTED_CHAT_SEND_TEST_ID));
 }
 
+/** Backs `mockExecute` with an in-memory conversation/message store so reads observe prior writes. */
 function installTrackedSqlMock() {
   const trackedConversations = new Set<string>();
   const trackedMessages: Array<{ role: string; content: string; conversationId: string }> = [];
@@ -238,38 +196,34 @@ function installTrackedSqlMock() {
   });
 }
 
+beforeEach(() => {
+  jest.clearAllMocks();
+  restoreRealChatStore();
+  mockExecute.mockClear();
+  mockExecute.mockResolvedValue({ rows: [], rowsAffected: 1 });
+
+  jest.mocked(getDownloadedModelsList).mockResolvedValue([MOCK_MODEL]);
+  jest.mocked(resolveDownloadedModelPath).mockResolvedValue(MOCK_MODEL_PATH);
+  jest.mocked(initializeModel).mockResolvedValue(undefined);
+  jest.mocked(releaseModel).mockResolvedValue(undefined);
+});
+
 describe("ChatScreen", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    restoreRealChatStore();
-    mockExecute.mockClear();
-    mockExecute.mockResolvedValue({ rows: [], rowsAffected: 1 });
-
-    jest.mocked(getDownloadedModelsList).mockResolvedValue([MOCK_MODEL]);
-    jest.mocked(resolveDownloadedModelPath).mockResolvedValue(MOCK_MODEL_PATH);
-    jest.mocked(initializeModel).mockResolvedValue(undefined);
-    jest.mocked(releaseModel).mockResolvedValue(undefined);
-  });
-
   it("shows the model selector when no model is assigned", async () => {
     mockChatStore({
       conversationDetails: {
-        [MOCK_NEW_CONVERSATION_ID]: {
-          ...buildReadyConversation(MOCK_MODEL),
-          modelId: "",
-        },
+        [MOCK_NEW_CONVERSATION_ID]: { ...buildReadyConversation(MOCK_MODEL), modelId: "" },
       },
-      loadConversation: jest.fn().mockResolvedValue(null),
     });
 
     await mountChatScreen();
+
     expect(screen.getAllByText(ChatScreenLabels.MODEL_SELECT_TITLE).length).toBeGreaterThan(0);
   });
 
   it("dispatches the typed message through sendMessage when Gifted Chat send is pressed", async () => {
     const store = mockChatStore({
       conversationDetails: { [MOCK_NEW_CONVERSATION_ID]: buildReadyConversation(MOCK_MODEL) },
-      loadConversation: jest.fn().mockResolvedValue(null),
     });
 
     await mountChatScreen();
@@ -286,20 +240,16 @@ describe("ChatScreen", () => {
 });
 
 describe("Messaging pipeline and database sync", () => {
+  let consoleErrorSpy: jest.SpyInstance;
+
   beforeAll(async () => {
     await chatDb.initialize("test-hardware-key");
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    restoreRealChatStore();
-    mockExecute.mockClear();
     installTrackedSqlMock();
-
-    jest.mocked(getDownloadedModelsList).mockResolvedValue([MOCK_MODEL]);
-    jest.mocked(resolveDownloadedModelPath).mockResolvedValue(MOCK_MODEL_PATH);
-    jest.mocked(initializeModel).mockResolvedValue(undefined);
-    jest.mocked(releaseModel).mockResolvedValue(undefined);
+    // Recorded, not silenced: real failures stay visible in the test output.
+    consoleErrorSpy = jest.spyOn(console, "error");
     jest.mocked(chatCompletion).mockImplementation(async (_prompt, onToken) => {
       onToken?.("On-device ");
       onToken?.(MOCK_ASSISTANT_RESPONSE);
@@ -308,10 +258,11 @@ describe("Messaging pipeline and database sync", () => {
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    consoleErrorSpy.mockRestore();
   });
 
-  it("persists user and assistant messages after chat completion", async () => {
+  /** Drives a full send from an empty conversation through to chat completion. */
+  async function sendFirstMessage() {
     await mountChatScreenWithProvider(dbSyncRoute);
 
     if (screen.queryAllByText(ChatScreenLabels.MODEL_SELECT_TITLE).length > 0) {
@@ -319,15 +270,26 @@ describe("Messaging pipeline and database sync", () => {
     }
 
     await typeAndSendMessage(MOCK_USER_PROMPT);
+  }
+
+  it("persists user and assistant messages after chat completion", async () => {
+    await sendFirstMessage();
 
     await waitFor(() => {
-      const inserts = getChatMessageInserts();
-      const userInsert = inserts.find((params) => params[2] === "user");
-      const assistantInsert = inserts.find((params) => params[2] === "assistant");
-
-      expect(userInsert?.[3]).toBe(MOCK_USER_PROMPT);
-      expect(assistantInsert?.[3]).toBe(MOCK_ASSISTANT_RESPONSE);
+      const inserts = getInsertParams("INSERT INTO chat_messages");
+      expect(inserts.find((params) => params[2] === "user")?.[3]).toBe(MOCK_USER_PROMPT);
+      expect(inserts.find((params) => params[2] === "assistant")?.[3]).toBe(MOCK_ASSISTANT_RESPONSE);
       expect(inserts.length).toBeGreaterThanOrEqual(2);
     });
+  });
+
+  it("stores background embeddings for both turns without logging a failure", async () => {
+    await sendFirstMessage();
+
+    await waitFor(() => {
+      expect(getInsertParams("INSERT INTO message_embeddings").length).toBeGreaterThanOrEqual(2);
+    });
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 });
